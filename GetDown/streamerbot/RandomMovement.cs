@@ -3,75 +3,93 @@ using System.Collections.Generic;
 
 public class CPHInline
 {
-    // Configuration
-    private const int FPS = 30;
-    private const int DURATION_MS = 5000;
-    private const int FRAME_INTERVAL = 1000 / FPS;
-
-    private static readonly Random rng = new Random();
-
-    // Parameter definitions: name, min, max
-    private static readonly (string name, double min, double max)[] Params = new[]
-    {
-        ("FaceAngleX",  -30.0,  30.0),
-        ("FaceAngleY",  -30.0,  30.0),
-        ("FaceAngleZ",  -30.0,  30.0),
-        ("FacePositionX", -10.0, 10.0),
-        ("FacePositionY", -10.0, 10.0),
-        ("EyeOpenLeft",   0.0,   1.0),
-        ("EyeOpenRight",  0.0,   1.0),
-        ("EyeLeftX",     -1.0,   1.0),
-        ("EyeLeftY",     -1.0,   1.0),
-        ("EyeRightX",    -1.0,   1.0),
-        ("EyeRightY",    -1.0,   1.0),
-        ("MouthOpen",     0.0,   1.0),
-        ("MouthSmile",   -1.0,   1.0),
-        ("BrowLeftY",    -1.0,   1.0),
-        ("BrowRightY",   -1.0,   1.0),
-        ("BodyAngleX",  -15.0,  15.0),
-        ("BodyAngleY",  -15.0,  15.0),
-        ("BodyAngleZ",  -15.0,  15.0),
-    };
+    private const string GLOBAL_VAR = "GetDown_Active";
 
     public bool Execute()
     {
-        int totalFrames = DURATION_MS / FRAME_INTERVAL;
-
-        for (int frame = 0; frame < totalFrames; frame++)
+        bool active = CPH.GetGlobalVar<bool>(GLOBAL_VAR, false);
+        if (active)
         {
+            CPH.SetGlobalVar(GLOBAL_VAR, false, false);
+            return true;
+        }
+
+        CPH.SetGlobalVar(GLOBAL_VAR, true, false);
+
+        var rng = new Random();
+        int fps = 20;
+        int frameInterval = 1000 / fps;
+
+        string[] paramNames = new string[]
+        {
+            "FaceAngleX", "FaceAngleY", "FaceAngleZ",
+            "FacePositionX", "FacePositionY",
+            "EyeOpenLeft", "EyeOpenRight",
+            "EyeLeftX", "EyeLeftY", "EyeRightX", "EyeRightY",
+            "MouthOpen", "MouthSmile",
+            "BrowLeftY", "BrowRightY",
+            "BodyAngleX", "BodyAngleY", "BodyAngleZ",
+        };
+        double[] paramMin = new double[]
+        {
+            -30, -30, -30,
+            -10, -10,
+            0, 0,
+            -1, -1, -1, -1,
+            0, -1,
+            -1, -1,
+            -15, -15, -15,
+        };
+        double[] paramMax = new double[]
+        {
+            30, 30, 30,
+            10, 10,
+            1, 1,
+            1, 1, 1, 1,
+            1, 1,
+            1, 1,
+            15, 15, 15,
+        };
+
+        int frame = 0;
+        while (CPH.GetGlobalVar<bool>(GLOBAL_VAR, false))
+        {
+            frame++;
+            double elapsed = (double)frame / fps;
             var paramList = new List<string>();
 
-            foreach (var (name, min, max) in Params)
+            for (int p = 0; p < paramNames.Length; p++)
             {
-                // Pure random each frame — snap between extremes
+                double min = paramMin[p];
+                double max = paramMax[p];
+                double mid = (min + max) / 2.0;
+                double range = max - min;
                 double val;
-                int technique = rng.Next(4);
 
+                int technique = rng.Next(4);
                 switch (technique)
                 {
-                    case 0: // Snap to min or max
+                    case 0:
                         val = rng.NextDouble() < 0.5 ? min : max;
                         break;
-                    case 1: // High-frequency oscillation
+                    case 1:
                         double freq = 8.0 + rng.NextDouble() * 32.0;
-                        double elapsed = (double)frame / FPS;
-                        val = (min + max) / 2.0 + (max - min) / 2.0 * Math.Sin(elapsed * freq * 2 * Math.PI);
+                        val = mid + (range / 2.0) * Math.Sin(elapsed * freq * 2 * Math.PI);
                         break;
-                    case 2: // Full random
-                        val = min + rng.NextDouble() * (max - min);
+                    case 2:
+                        val = min + rng.NextDouble() * range;
                         break;
-                    default: // Hold at extreme
+                    default:
                         val = frame % 7 < 3 ? min : max;
                         break;
                 }
 
-                paramList.Add($"{{\"id\":\"{name}\",\"value\":{val:F3}}}");
+                paramList.Add("{\"id\":\"" + paramNames[p] + "\",\"weight\":1,\"value\":" + val.ToString("F3") + "}");
             }
 
-            string json = $"{{\"faceFound\":true,\"mode\":\"set\",\"parameterValues\":[{string.Join(",", paramList)}]}}";
-
+            string json = "{\"faceFound\":true,\"mode\":\"set\",\"parameterValues\":[" + string.Join(",", paramList) + "]}";
             CPH.VTubeStudioSendRawRequest("InjectParameterDataRequest", json);
-            CPH.Wait(FRAME_INTERVAL);
+            System.Threading.Thread.Sleep(frameInterval);
         }
 
         return true;

@@ -1,35 +1,44 @@
-# Random Movement Generator - Streamer.bot Extension
+# GetDown - Streamer.bot Extension
 
 ## Setup
 
 1. Open **Streamer.bot**
-2. Make sure VTube Studio integration is connected (Settings > Integrations > VTube Studio)
-3. Click **Import** in the top menu
-4. Drag and drop the `.sb` file, or paste the import string from below
-5. Assign a trigger (hotkey, channel point redeem, chat command, etc.)
+2. Make sure VTube Studio integration is connected:
+   - Go to **Integrations** (left sidebar) > **VTube Studio**
+   - Set the **Port** to match VTube Studio's API port (default `8004`)
+   - Click **Connect** — Connection Status should show connected
+3. Click **Import** in the top menu bar
+4. Paste the import string below into the import box and click **Import**
+5. The action comes with an **F5** hotkey trigger by default — you can change this to whatever you want (chat command, channel point redeem, etc.)
 
 ## Import String
 
-> TODO: Export from Streamer.bot after creating the action
+Copy the contents of [`import.txt`](import.txt) and paste it into Streamer.bot's Import dialog.
 
 ## Manual Setup (if import doesn't work)
 
-1. Create a new **Action** called "Random Movement"
-2. Add a **Sub-Action** > **Core** > **C#** > **Execute C# Code**
+1. Create a new **Action** called "GetDown"
+2. In the Sub-Actions panel, right-click > **Core** > **C#** > **Execute C# Code**
 3. Paste the contents of `RandomMovement.cs`
-4. Compile and save
-5. Assign a trigger
+4. Click **Compile** — make sure it says "Compiled successfully"
+5. Click **Save and Close**
+6. Add a trigger (right-click in the Triggers panel > Add > Core > Inputs > Hotkey, or a chat command, etc.)
+
+## Usage
+
+This is a toggle. Trigger it once to start, trigger it again to stop. Bind it to a single command/redeem/hotkey and it handles both states.
+
+**Important:** Put this action in its own action queue. While running, it blocks the queue it's in — other actions in the same queue won't run until it stops.
 
 ## Configuration
 
-Edit the constants at the top of the C# code:
+Edit the constants inside the `Execute()` method:
 
-- `FPS` — frames per second (default: 30)
-- `DURATION_MS` — how long the chaos lasts in milliseconds (default: 5000)
-- Parameter ranges can be adjusted in the `Params` array
+- `fps` — frames per second (default: 20)
+- Parameter names and ranges can be adjusted in the `paramNames`, `paramMin`, and `paramMax` arrays
 
 ## Notes
 
-- This blocks the action queue for the duration (5 seconds). Put it in its own queue if you need other actions to run simultaneously.
 - VTube Studio must be running with the API enabled.
-- Streamer.bot handles authentication automatically.
+- Streamer.bot handles VTube Studio authentication automatically.
+- The toggle state is stored in a global variable (`GetDown_Active`). If something goes wrong and it gets stuck, you can manually set that variable to `false` in Streamer.bot under Global Variables > Non-Persisted Globals.
