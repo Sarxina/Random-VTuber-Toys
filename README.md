@@ -10,9 +10,15 @@ Controls your VTuber model through totally random number generation
 
 Available as a **standalone Python script** or a **Streamer.bot extension**.
 
+### [EmojiHead](EmojiHead/)
+
+Replaces your VTuber model's face with an emote image. Triggered by chat command.
+
+Available as a **standalone TypeScript app** or a **Streamer.bot extension**.
+
 ## VTube Studio Setup
 
-Both tools need VTube Studio's API turned on. Here's how:
+All tools need VTube Studio's API turned on. Here's how:
 
 1. Open **VTube Studio**
 2. Click the **gear icon** to open Settings

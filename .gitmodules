@@ -1,0 +1,3 @@
+[submodule "utils/chatgod-js"]
+	path = utils/chatgod-js
+	url = https://github.com/Sarxina/chatgod-js.git
