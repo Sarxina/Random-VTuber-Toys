@@ -1,52 +1,124 @@
 using System;
 using System.IO;
+using System.Net.Http;
+using System.Collections.Generic;
 
 public class CPHInline
 {
     private const string GLOBAL_VAR = "EmojiHead_Active";
     private const string ITEM_ID_VAR = "EmojiHead_ItemID";
-
-    // Artmesh to pin the emote to
-    private const string PIN_ARTMESH = "FaceColorMain";
-
-    // Path to emote image — update this to your emote PNG
-    private const string EMOTE_PATH = @"C:\Users\aleck\Documents\Sarxina\Coding\Random VTuber Toys\EmojiHead\standalone\emotes\brainded.png";
+    private const string FACE_MESH_VAR = "EmojiHead_FaceMesh";
 
     // Emote size (0-1)
-    private const double EMOTE_SIZE = 0.22;
+    private const double EMOTE_SIZE = 0.62;
+
 
     public bool Execute()
     {
         bool active = CPH.GetGlobalVar<bool>(GLOBAL_VAR, false);
-        return active ? Disable() : Enable();
+
+        string message = "";
+        CPH.TryGetArg("message", out message);
+        string lower = (message ?? "").Trim().ToLower();
+
+        // "!emojihead off" always disables
+        if (lower == "!emojihead off")
+            return active ? Disable() : true;
+
+        // If active and a new emote is provided, disable first then re-enable
+        if (active)
+        {
+            Disable();
+        }
+
+        return Enable();
     }
 
     private bool Enable()
     {
-        byte[] imageBytes;
-        try
+        byte[] imageBytes = null;
+        string emoteName = "emote";
+
+        // Try to get emote from chat message
+        int emoteCount = 0;
+        CPH.TryGetArg("emoteCount", out emoteCount);
+
+        if (emoteCount > 0)
         {
-            imageBytes = File.ReadAllBytes(EMOTE_PATH);
+            // Get emotes as raw object and use reflection (it's List<Twitch.Common.Models.Emote>)
+            object emotesRaw = null;
+            CPH.TryGetArg("emotes", out emotesRaw);
+
+            if (emotesRaw != null)
+            {
+                var countProp = emotesRaw.GetType().GetProperty("Count");
+                int count = (int)countProp.GetValue(emotesRaw);
+
+                if (count > 0)
+                {
+                    var itemProp = emotesRaw.GetType().GetProperty("Item");
+                    var firstEmote = itemProp.GetValue(emotesRaw, new object[] { 0 });
+
+                    var imageUrlProp = firstEmote.GetType().GetProperty("ImageUrl");
+                    var nameProp = firstEmote.GetType().GetProperty("Name");
+
+                    if (imageUrlProp != null)
+                    {
+                        string imageUrl = imageUrlProp.GetValue(firstEmote) as string;
+                        if (nameProp != null)
+                            emoteName = (nameProp.GetValue(firstEmote) as string) ?? "emote";
+
+                        if (!string.IsNullOrEmpty(imageUrl))
+                        {
+                            // Ensure we get the largest size (3.0)
+                            imageUrl = imageUrl.Replace("/1.0", "/3.0").Replace("/2.0", "/3.0");
+
+                            try
+                            {
+                                using (var http = new HttpClient())
+                                {
+                                    imageBytes = http.GetByteArrayAsync(imageUrl).GetAwaiter().GetResult();
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                CPH.LogInfo("[EmojiHead] Failed to download emote: " + ex.Message);
+                            }
+                        }
+                    }
+                }
+            }
         }
-        catch (Exception ex)
+
+        // No emote found — skip
+        if (imageBytes == null)
         {
-            CPH.LogInfo("[EmojiHead] Failed to read emote file: " + ex.Message);
-            return false;
+            CPH.LogInfo("[EmojiHead] No emote found in message, skipping.");
+            return true;
         }
 
         string base64 = Convert.ToBase64String(imageBytes);
 
-        // Get model size to scale emote proportionally
-        string modelPosResp = CPH.VTubeStudioSendRawRequest("GetModelPositionRequest", "{}");
-        double modelSize = ExtractJsonDouble(modelPosResp, "size", -30.0);
-        // VTS model size is roughly -30 (default). Larger values = bigger model on screen.
-        // Convert to a multiplier: default -30 -> 1.0x
-        double sizeMultiplier = Math.Pow(10.0, (modelSize + 30.0) / 30.0);
-        double scaledSize = EMOTE_SIZE * sizeMultiplier;
-        if (scaledSize > 1.0) scaledSize = 1.0;
-        if (scaledSize < 0.01) scaledSize = 0.01;
+        // Query model artmeshes
+        string artMeshResp = CPH.VTubeStudioSendRawRequest("ArtMeshListRequest", "{}");
+        string[] allMeshes = ParseArtMeshNames(artMeshResp);
 
-        // Load item — fileName must be alphanumeric+hyphens, 8-32 chars
+        // Find the best artmesh to pin to (nose > face > head)
+        string pinMesh = FindPinMesh(allMeshes);
+        if (string.IsNullOrEmpty(pinMesh))
+        {
+            CPH.LogInfo("[EmojiHead] Could not find a face artmesh to pin to.");
+            return false;
+        }
+        CPH.LogInfo("[EmojiHead] Pinning to: " + pinMesh);
+
+        // Find face artmeshes to hide
+        string[] faceMeshes = FindFaceMeshes(allMeshes);
+        CPH.LogInfo("[EmojiHead] Hiding " + faceMeshes.Length + " face artmeshes");
+
+        double scaledSize = EMOTE_SIZE;
+
+        // Load item
         string loadJson = "{\"fileName\":\"emojihead.png\""
             + ",\"positionX\":0,\"positionY\":0"
             + ",\"size\":" + scaledSize.ToString("F4")
@@ -79,11 +151,11 @@ public class CPHInline
             + ",\"angleRelativeTo\":\"RelativeToModel\""
             + ",\"sizeRelativeTo\":\"RelativeToWorld\""
             + ",\"vertexPinType\":\"Center\""
-            + ",\"pinInfo\":{\"modelID\":\"\",\"artMeshID\":\"" + PIN_ARTMESH + "\",\"angle\":0,\"size\":" + scaledSize.ToString("F4") + "}}";
+            + ",\"pinInfo\":{\"modelID\":\"\",\"artMeshID\":\"" + pinMesh + "\",\"angle\":0,\"size\":" + scaledSize.ToString("F4") + "}}";
 
         CPH.VTubeStudioSendRawRequest("ItemPinRequest", pinJson);
 
-        // Sort emote to same depth as the face (behind hair/ears, where the face sits)
+        // Sort emote to same depth as the face (behind hair/ears)
         string sortJson = "{\"itemInstanceID\":\"" + instanceId + "\""
             + ",\"frontOn\":true"
             + ",\"backOn\":false"
@@ -91,16 +163,18 @@ public class CPHInline
             + ",\"setFrontOrder\":\"UseArtMeshID\""
             + ",\"setBackOrder\":\"Unchanged\""
             + ",\"splitAt\":\"\""
-            + ",\"withinModelOrderFront\":\"" + PIN_ARTMESH + "\""
+            + ",\"withinModelOrderFront\":\"" + pinMesh + "\""
             + ",\"withinModelOrderBack\":\"\"}";
 
         CPH.VTubeStudioSendRawRequest("ItemSortRequest", sortJson);
 
-        // Hide face
-        TintFace(0);
+        // Hide face artmeshes by exact name
+        TintMeshes(faceMeshes, 0);
 
         CPH.SetGlobalVar(GLOBAL_VAR, true, false);
         CPH.SetGlobalVar(ITEM_ID_VAR, instanceId, false);
+        // Store face mesh names for disable
+        CPH.SetGlobalVar(FACE_MESH_VAR, string.Join("|", faceMeshes), false);
         CPH.LogInfo("[EmojiHead] ON - item " + instanceId);
         return true;
     }
@@ -108,9 +182,14 @@ public class CPHInline
     private bool Disable()
     {
         string instanceId = CPH.GetGlobalVar<string>(ITEM_ID_VAR, false) ?? "";
+        string faceMeshStr = CPH.GetGlobalVar<string>(FACE_MESH_VAR, false) ?? "";
 
         // Restore face
-        TintFace(255);
+        if (!string.IsNullOrEmpty(faceMeshStr))
+        {
+            string[] faceMeshes = faceMeshStr.Split('|');
+            TintMeshes(faceMeshes, 255);
+        }
 
         // Unload item
         if (!string.IsNullOrEmpty(instanceId))
@@ -125,75 +204,111 @@ public class CPHInline
 
         CPH.SetGlobalVar(GLOBAL_VAR, false, false);
         CPH.SetGlobalVar(ITEM_ID_VAR, "", false);
+        CPH.SetGlobalVar(FACE_MESH_VAR, "", false);
         CPH.LogInfo("[EmojiHead] OFF");
         return true;
     }
 
-    private void TintFace(int alpha)
+    private void TintMeshes(string[] meshNames, int alpha)
     {
-        string[] facePatterns = new string[]
-        {
-            "FaceColor", "Freckles", "EyePupil", "Sclera", "Eyelash", "Eyelid",
-            "ShadowOverEyes", "Eyebrow", "NoseMask", "NoseShadow", "NoseWhiteDot",
-            "Nostrils", "Lips", "Mouth", "Tongue", "Teeth", "Canine", "Blush",
-            "TopColor", "BottomColor"
-        };
-        string patterns = "\"" + string.Join("\",\"", facePatterns) + "\"";
+        // Use nameExact for precise control
+        string names = "\"" + string.Join("\",\"", meshNames) + "\"";
         string json = "{\"colorTint\":{\"colorR\":255,\"colorG\":255,\"colorB\":255,\"colorA\":" + alpha
             + ",\"mixWithSceneLightingColor\":0}"
-            + ",\"artMeshMatcher\":{\"tintAll\":false,\"artMeshNumber\":[],\"nameExact\":[]"
-            + ",\"nameContains\":[" + patterns + "]"
+            + ",\"artMeshMatcher\":{\"tintAll\":false,\"artMeshNumber\":[],\"nameExact\":[" + names + "]"
+            + ",\"nameContains\":[]"
             + ",\"tagExact\":[],\"tagContains\":[]}}";
 
         CPH.VTubeStudioSendRawRequest("ColorTintRequest", json);
     }
 
-    private string FindHairArtMesh(string artMeshListResp)
+    private string[] ParseArtMeshNames(string resp)
     {
-        // Look through the artmesh names for one containing "hair" (case-insensitive)
-        // Prefer front-facing hair (fringe/bangs) over side/back hair
-        string[] preferredPatterns = new string[] { "Fringe", "fringe", "Bangs", "bangs", "Front" };
-        string fallbackHair = "";
-
-        if (string.IsNullOrEmpty(artMeshListResp)) return "";
-
-        // Find the artMeshNames array
+        if (string.IsNullOrEmpty(resp)) return new string[0];
         string arrayStart = "\"artMeshNames\":[";
-        int idx = artMeshListResp.IndexOf(arrayStart);
-        if (idx < 0) return "";
+        int idx = resp.IndexOf(arrayStart);
+        if (idx < 0) return new string[0];
         idx += arrayStart.Length;
-        int arrayEnd = artMeshListResp.IndexOf("]", idx);
-        if (arrayEnd < 0) return "";
+        int arrayEnd = resp.IndexOf("]", idx);
+        if (arrayEnd < 0) return new string[0];
 
-        string namesSection = artMeshListResp.Substring(idx, arrayEnd - idx);
-        string[] names = namesSection.Replace("\"", "").Split(',');
-
-        foreach (string rawName in names)
+        string section = resp.Substring(idx, arrayEnd - idx);
+        string[] raw = section.Replace("\"", "").Split(',');
+        var result = new List<string>();
+        foreach (string s in raw)
         {
-            string name = rawName.Trim();
-            if (name.Length == 0) continue;
-
-            string lower = name.ToLower();
-            if (!lower.Contains("hair")) continue;
-
-            // Check preferred patterns first
-            foreach (string pattern in preferredPatterns)
-            {
-                if (name.Contains(pattern))
-                    return name;
-            }
-
-            // Store first hair mesh as fallback
-            if (string.IsNullOrEmpty(fallbackHair))
-                fallbackHair = name;
+            string trimmed = s.Trim();
+            if (trimmed.Length > 0) result.Add(trimmed);
         }
+        return result.ToArray();
+    }
 
-        return fallbackHair;
+    private string FindPinMesh(string[] meshNames)
+    {
+        string[] pinPatterns = new string[] { "nose", "face", "head" };
+        foreach (string pattern in pinPatterns)
+        {
+            foreach (string mesh in meshNames)
+            {
+                if (mesh.ToLower().Contains(pattern))
+                    return mesh;
+            }
+        }
+        // Last resort: return first mesh
+        return meshNames.Length > 0 ? meshNames[0] : "";
+    }
+
+    private string[] FindFaceMeshes(string[] allMeshes)
+    {
+        string[] facePatterns = new string[]
+        {
+            "face", "freckle", "eyepupil", "pupil", "sclera", "eyelash", "eyelid",
+            "shadowovereye", "eyebrow", "brow",
+            "nose", "nostril",
+            "lip", "mouth", "tongue", "teeth", "canine", "gum",
+            "blush"
+        };
+        string[] keepPatterns = new string[]
+        {
+            "hair", "ear", "glass", "earring", "neckpiece", "neckpie", "choker",
+            "horn", "antenna", "halo", "crown", "hat", "ribbon",
+            "braid", "ponytail", "pigtail", "bangs", "fringe", "ahoge"
+        };
+
+        var result = new List<string>();
+        foreach (string mesh in allMeshes)
+        {
+            string lower = mesh.ToLower();
+
+            bool isFace = false;
+            foreach (string pattern in facePatterns)
+            {
+                if (lower.Contains(pattern))
+                {
+                    isFace = true;
+                    break;
+                }
+            }
+            if (!isFace) continue;
+
+            bool keep = false;
+            foreach (string pattern in keepPatterns)
+            {
+                if (lower.Contains(pattern))
+                {
+                    keep = true;
+                    break;
+                }
+            }
+            if (keep) continue;
+
+            result.Add(mesh);
+        }
+        return result.ToArray();
     }
 
     private double ExtractJsonDouble(string json, string key, double defaultVal)
     {
-        // Handles both "key":123.45 and "key":-30.0
         string search = "\"" + key + "\":";
         int start = json.IndexOf(search);
         if (start < 0) return defaultVal;

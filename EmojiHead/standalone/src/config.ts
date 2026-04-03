@@ -8,7 +8,7 @@ export const PIN_ARTMESH = "FaceColorMain";
 export const DEFAULT_EMOTE_PATH = "./emotes/brainded.png";
 
 // Emote size when pinned (0-1)
-export const EMOTE_SIZE = 0.4;
+export const EMOTE_SIZE = 0.62;
 
 // Chat command to trigger the emote head
 export const TRIGGER_COMMAND = "!emojihead";

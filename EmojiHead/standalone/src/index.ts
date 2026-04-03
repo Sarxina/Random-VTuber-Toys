@@ -24,14 +24,17 @@ let active = false;
 let currentItemId: string | null = null;
 
 async function enableEmojiHead(ws: WebSocket): Promise<void> {
-  if (active) return;
+  // If already active, disable first (swap emotes)
+  if (active) {
+    await disableEmojiHead(ws);
+  }
 
   console.log("  Loading emote...");
   currentItemId = await loadItemFromFile(ws, DEFAULT_EMOTE_PATH, EMOTE_SIZE);
   console.log(`  Loaded item: ${currentItemId}`);
 
   console.log(`  Pinning to ${PIN_ARTMESH}...`);
-  await pinItemToArtMesh(ws, currentItemId, PIN_ARTMESH);
+  await pinItemToArtMesh(ws, currentItemId, PIN_ARTMESH, EMOTE_SIZE);
 
   console.log("  Hiding face artmeshes...");
   const hidden = await hideFaceArtMeshes(ws, FACE_HIDE_PATTERNS);
@@ -54,14 +57,6 @@ async function disableEmojiHead(ws: WebSocket): Promise<void> {
   currentItemId = null;
   active = false;
   console.log("  EmojiHead OFF");
-}
-
-async function toggle(ws: WebSocket): Promise<void> {
-  if (active) {
-    await disableEmojiHead(ws);
-  } else {
-    await enableEmojiHead(ws);
-  }
 }
 
 async function main(): Promise<void> {
@@ -101,13 +96,18 @@ async function main(): Promise<void> {
   const chatClient = new ChatClient({ authProvider, channels: [channel] });
 
   chatClient.onMessage(async (_channel, user, message) => {
-    if (message.trim().toLowerCase() === TRIGGER_COMMAND) {
-      console.log(`  ${user} triggered ${TRIGGER_COMMAND}`);
-      try {
-        await toggle(ws);
-      } catch (e: any) {
-        console.error(`  Error: ${e.message}`);
+    const lower = message.trim().toLowerCase();
+    if (!lower.startsWith(TRIGGER_COMMAND)) return;
+
+    console.log(`  ${user}: ${message.trim()}`);
+    try {
+      if (lower === `${TRIGGER_COMMAND} off`) {
+        await disableEmojiHead(ws);
+      } else {
+        await enableEmojiHead(ws);
       }
+    } catch (e: any) {
+      console.error(`  Error: ${e.message}`);
     }
   });
 

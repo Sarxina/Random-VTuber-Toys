@@ -95,7 +95,7 @@ export async function loadItemFromFile(ws: WebSocket, filePath: string, size: nu
   return resp.data.instanceID;
 }
 
-export async function pinItemToArtMesh(ws: WebSocket, instanceId: string, artMeshId: string): Promise<void> {
+export async function pinItemToArtMesh(ws: WebSocket, instanceId: string, artMeshId: string, size: number = 0.62): Promise<void> {
   const resp = await sendRequest(ws, "ItemPinRequest", {
     pin: true,
     itemInstanceID: instanceId,
@@ -106,7 +106,7 @@ export async function pinItemToArtMesh(ws: WebSocket, instanceId: string, artMes
       modelID: "",
       artMeshID: artMeshId,
       angle: 0,
-      size: 0.4,
+      size,
     },
   });
 
