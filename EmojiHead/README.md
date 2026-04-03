@@ -2,6 +2,8 @@
 
 Replaces your VTuber model's face with a Twitch emote. Hides the face artmeshes and pins the emote to the head so it tracks with movement. Hair, ears, and accessories stay visible in front.
 
+![EmojiHead demo](demo.gif)
+
 ## Usage
 
 - `!emojihead <emote>` — replaces the face with that emote (or swaps to a new one if already active)
