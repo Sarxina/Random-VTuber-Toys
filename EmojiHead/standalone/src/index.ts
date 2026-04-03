@@ -5,6 +5,7 @@ import { ChatClient } from "@twurple/chat";
 import {
   authenticate,
   loadItemFromFile,
+  loadItemFromBase64,
   pinItemToArtMesh,
   unpinItem,
   unloadItem,
@@ -23,14 +24,26 @@ import {
 let active = false;
 let currentItemId: string | null = null;
 
-async function enableEmojiHead(ws: WebSocket): Promise<void> {
+async function downloadEmote(emoteId: string): Promise<string> {
+  const url = `https://static-cdn.jtvnbs.net/emoticons/v2/${emoteId}/default/dark/3.0`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Failed to download emote ${emoteId}: ${resp.status}`);
+  const buffer = Buffer.from(await resp.arrayBuffer());
+  return buffer.toString("base64");
+}
+
+async function enableEmojiHead(ws: WebSocket, emoteBase64?: string): Promise<void> {
   // If already active, disable first (swap emotes)
   if (active) {
     await disableEmojiHead(ws);
   }
 
   console.log("  Loading emote...");
-  currentItemId = await loadItemFromFile(ws, DEFAULT_EMOTE_PATH, EMOTE_SIZE);
+  if (emoteBase64) {
+    currentItemId = await loadItemFromBase64(ws, emoteBase64, EMOTE_SIZE);
+  } else {
+    currentItemId = await loadItemFromFile(ws, DEFAULT_EMOTE_PATH, EMOTE_SIZE);
+  }
   console.log(`  Loaded item: ${currentItemId}`);
 
   console.log(`  Pinning to ${PIN_ARTMESH}...`);
@@ -84,7 +97,11 @@ async function main(): Promise<void> {
     process.stdin.resume();
     process.stdin.on("data", async () => {
       try {
-        await toggle(ws);
+        if (active) {
+          await disableEmojiHead(ws);
+        } else {
+          await enableEmojiHead(ws);
+        }
       } catch (e: any) {
         console.error(`  Error: ${e.message}`);
       }
@@ -95,7 +112,7 @@ async function main(): Promise<void> {
   const authProvider = new StaticAuthProvider(clientId, accessToken);
   const chatClient = new ChatClient({ authProvider, channels: [channel] });
 
-  chatClient.onMessage(async (_channel, user, message) => {
+  chatClient.onMessage(async (_channel, user, message, msg) => {
     const lower = message.trim().toLowerCase();
     if (!lower.startsWith(TRIGGER_COMMAND)) return;
 
@@ -104,7 +121,24 @@ async function main(): Promise<void> {
       if (lower === `${TRIGGER_COMMAND} off`) {
         await disableEmojiHead(ws);
       } else {
-        await enableEmojiHead(ws);
+        // Try to get first emote from the message
+        const emoteOffsets = msg.emoteOffsets;
+        let emoteBase64: string | undefined;
+
+        if (emoteOffsets.size > 0) {
+          const firstEmoteId = emoteOffsets.keys().next().value;
+          if (firstEmoteId) {
+            console.log(`  Downloading emote ${firstEmoteId}...`);
+            emoteBase64 = await downloadEmote(firstEmoteId);
+          }
+        }
+
+        if (!emoteBase64) {
+          console.log("  No emote in message, skipping.");
+          return;
+        }
+
+        await enableEmojiHead(ws, emoteBase64);
       }
     } catch (e: any) {
       console.error(`  Error: ${e.message}`);

@@ -4,6 +4,10 @@ VTube Studio plugin that triggers erratic random movement.
 
 ![GetDown demo](demo.gif)
 
+## Streamer.bot Extension
+
+A C# action for Streamer.bot — no separate programs needed. See the [streamerbot/](streamerbot/) folder for full setup instructions.
+
 ## Standalone (Python)
 
 A Python script that connects directly to VTube Studio. Runs until you press Ctrl+C.
@@ -40,10 +44,6 @@ Open `random_movement.py` in any text editor (Notepad works fine) and change the
 - **"Authentication failed"** — You need to click Allow on the popup in VTube Studio. Try running the script again and watch for the popup.
 - **"python is not recognized"** — Python isn't installed or wasn't added to PATH. Reinstall Python and make sure to check "Add Python to PATH".
 - **"pip is not recognized"** — Try `python -m pip install -r requirements.txt` instead.
-
-## Streamer.bot Extension
-
-A C# action for Streamer.bot — no separate programs needed. See the [streamerbot/](streamerbot/) folder for full setup instructions.
 
 ## Break Model (Advanced)
 

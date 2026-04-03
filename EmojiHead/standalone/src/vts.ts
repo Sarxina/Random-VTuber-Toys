@@ -64,7 +64,35 @@ export async function authenticate(ws: WebSocket): Promise<void> {
   console.log("  Authenticated with VTube Studio.");
 }
 
-export async function loadItemFromFile(ws: WebSocket, filePath: string, size: number = 0.4): Promise<string> {
+export async function loadItemFromBase64(ws: WebSocket, base64: string, size: number = 0.62): Promise<string> {
+  const resp = await sendRequest(ws, "ItemLoadRequest", {
+    fileName: "emojihead_emote.png",
+    positionX: 0,
+    positionY: 0,
+    size,
+    rotation: 0,
+    fadeTime: 0.2,
+    order: 1,
+    failIfOrderTaken: false,
+    smoothing: 0,
+    censored: false,
+    flipped: false,
+    locked: false,
+    unloadWhenPluginDisconnects: true,
+    customDataBase64: base64,
+    customDataAskUserFirst: true,
+    customDataSkipAskingUserIfWhitelisted: true,
+    customDataAskTimer: -1,
+  });
+
+  if (resp.messageType === "APIError") {
+    throw new Error(`Failed to load item: ${resp.data.message}`);
+  }
+
+  return resp.data.instanceID;
+}
+
+export async function loadItemFromFile(ws: WebSocket, filePath: string, size: number = 0.62): Promise<string> {
   const imageBuffer = readFileSync(resolve(filePath));
   const base64 = imageBuffer.toString("base64");
 

@@ -21,6 +21,10 @@ public class CPHInline
         CPH.TryGetArg("message", out message);
         string lower = (message ?? "").Trim().ToLower();
 
+        // Ignore messages that don't start with !emojihead
+        if (!string.IsNullOrEmpty(lower) && !lower.StartsWith("!emojihead"))
+            return true;
+
         // "!emojihead off" always disables
         if (lower == "!emojihead off")
             return active ? Disable() : true;
