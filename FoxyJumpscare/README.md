@@ -1,6 +1,6 @@
 # FoxyJumpscare
 
-Every second, theres a 1 in 10,000 chance Withered Foxy jumpscares you through your model.
+A VTube Studio plugin where every second, theres a 1 in 10,000 chance Withered Foxy jumpscares you through your model.
 
 ## Usage
 
