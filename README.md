@@ -16,6 +16,12 @@ Replaces your VTuber model's face with an emote image. Triggered by chat command
 
 Available as a **standalone TypeScript app** or a **Streamer.bot extension**.
 
+### [FoxyJumpscare](FoxyJumpscare/)
+
+Every second, rolls 1 in 10,000. If it hits, Withered Foxy jumps your model.
+
+Available as a **standalone Python script** or a **Streamer.bot extension**.
+
 ## VTube Studio Setup
 
 All tools need VTube Studio's API turned on. Here's how:

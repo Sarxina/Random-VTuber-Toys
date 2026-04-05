@@ -13,7 +13,7 @@
 
 ## Import String
 
-Copy the contents of [`import.txt`](import.txt) and paste it into Streamer.bot's Import dialog.
+Copy the contents of [`Import This to Streamerbot`](Import%20This%20to%20Streamerbot) and paste it into Streamer.bot's Import dialog.
 
 ## Manual Setup (if import doesn't work)
 
