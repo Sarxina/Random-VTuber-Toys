@@ -1,8 +1,6 @@
 # FoxyJumpscare
 
-Every second, rolls 1 in 10,000. If it hits, Withered Foxy jumps your model.
-
-That's it. That's the plugin.
+Every second, theres a 10,000 Withered Foxy jumpscares you through your model.
 
 ## Usage
 
