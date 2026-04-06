@@ -19,6 +19,8 @@ public class CPHInline
     // ==================
 
     private static readonly Random _rng = new Random();
+    private static string _cachedBase64;
+    private static string _cachedWavPath;
 
     public bool Execute()
     {
@@ -33,33 +35,30 @@ public class CPHInline
         }
 
         string gifPath = Path.Combine(repoRoot, "FoxyJumpscare", "assets", "jumpscare.gif");
-        string wavPath = Path.Combine(repoRoot, "FoxyJumpscare", "assets", "jumpscare.wav");
+        _cachedWavPath = Path.Combine(repoRoot, "FoxyJumpscare", "assets", "jumpscare.wav");
 
         CPH.LogInfo("[FoxyJumpscare] *** IT'S ME *** (rolled " + roll + "/" + CHANCE_DENOM + ")");
 
-        if (!File.Exists(gifPath))
+        // Cache the base64-encoded GIF on first trigger to avoid re-reading 3MB each time
+        if (_cachedBase64 == null)
         {
-            CPH.LogWarn("[FoxyJumpscare] GIF not found: " + gifPath);
-            return false;
+            if (!File.Exists(gifPath))
+            {
+                CPH.LogWarn("[FoxyJumpscare] GIF not found: " + gifPath);
+                return false;
+            }
+            try
+            {
+                _cachedBase64 = Convert.ToBase64String(File.ReadAllBytes(gifPath));
+            }
+            catch (Exception ex)
+            {
+                CPH.LogWarn("[FoxyJumpscare] Could not read GIF: " + ex.Message);
+                return false;
+            }
         }
 
-        // Play audio alongside the visual
-        if (File.Exists(wavPath))
-        {
-            try { CPH.PlaySound(wavPath, 1.0f, false); }
-            catch (Exception ex) { CPH.LogWarn("[FoxyJumpscare] Sound failed: " + ex.Message); }
-        }
-
-        string base64;
-        try
-        {
-            base64 = Convert.ToBase64String(File.ReadAllBytes(gifPath));
-        }
-        catch (Exception ex)
-        {
-            CPH.LogWarn("[FoxyJumpscare] Could not read GIF: " + ex.Message);
-            return false;
-        }
+        string base64 = _cachedBase64;
 
         // VTS routes custom image parsing by filename extension — must match actual format
         string loadJson = "{\"fileName\":\"foxyjumpscare.gif\""
@@ -86,6 +85,13 @@ public class CPHInline
         {
             CPH.LogWarn("[FoxyJumpscare] Could not extract instanceID");
             return false;
+        }
+
+        // Play sound after VTS confirms the item is loaded so they're in sync
+        if (File.Exists(_cachedWavPath))
+        {
+            try { CPH.PlaySound(_cachedWavPath, 1.0f, false); }
+            catch (Exception ex) { CPH.LogWarn("[FoxyJumpscare] Sound failed: " + ex.Message); }
         }
 
         Thread.Sleep(ITEM_DURATION_MS);
