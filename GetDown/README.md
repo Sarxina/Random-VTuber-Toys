@@ -4,9 +4,9 @@ VTube Studio plugin that triggers erratic random movement.
 
 ![GetDown demo](demo.gif)
 
-## Streamer.bot Extension
+## Streamer.bot Extension (Easy Mode)
 
-A C# action for Streamer.bot — no separate programs needed. See the [streamerbot/](streamerbot/) folder for full setup instructions.
+See the [streamerbot/](streamerbot/) folder for full setup instructions.
 
 ## Standalone (Python)
 
