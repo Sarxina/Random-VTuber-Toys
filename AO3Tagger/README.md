@@ -2,6 +2,8 @@
 
 Tag your VTuber model with AO3-style tags. Chat sends `!ao3tag <tag>` and the tags pile up on the model's forehead like a real AO3 listing.
 
+![AO3Tagger demo](demo.gif)
+
 ## Usage
 
 - `!ao3tag <tag>` — adds a tag to the list (e.g. `!ao3tag Slow Burn`)
