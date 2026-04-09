@@ -11,7 +11,7 @@ Replaces your VTuber model's face with a Twitch emote. Hides the face artmeshes 
 
 ## Streamer.bot Extension
 
-A C# action for Streamer.bot — no separate programs needed. See the [streamerbot/](streamerbot/) folder for setup instructions.
+A ready-to-import Streamer.bot action — no separate programs needed. See the [streamerbot/](streamerbot/) folder for setup instructions.
 
 ## Standalone (TypeScript)
 

@@ -22,6 +22,12 @@ Every second, rolls 1 in 10,000. If it hits, Withered Foxy jumps your model.
 
 Available as a **standalone Python script** or a **Streamer.bot extension**.
 
+### [AO3Tagger](AO3Tagger/)
+
+Tag your VTuber model with AO3-style tags from chat. Tags pile up on the forehead like a real AO3 work listing.
+
+Available as a **standalone Python script** or a **Streamer.bot extension**.
+
 ## VTube Studio Setup
 
 All tools need VTube Studio's API turned on. Here's how:
