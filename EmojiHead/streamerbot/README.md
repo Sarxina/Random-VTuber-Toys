@@ -10,6 +10,7 @@
 3. Click **Import** in the top menu bar
 4. Copy the contents of [`Import This to Streamerbot`](Import%20This%20to%20Streamerbot) and paste into the import box, then click **Import**
 5. The action comes with a `!emojihead` chat command trigger by default
+6. In **VTube Studio → Settings → API → Streamer.bot**, enable **`Allow loading of custom images as items`**.
 
 ## Usage
 
@@ -25,6 +26,10 @@ The plugin automatically detects face artmeshes (eyes, nose, mouth, etc.) and hi
 Edit the constants at the top of the code:
 
 - **`EMOTE_SIZE`** — size of the emote (0-1, default: `0.62`)
+
+## Troubleshooting
+
+**Command runs but nothing appears on the model:** Check that **`Allow loading of custom images as items`** is enabled for the Streamer.bot plugin in VTube Studio's API settings. This is the most common cause.
 
 ## Notes
 

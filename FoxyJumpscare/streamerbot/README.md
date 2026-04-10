@@ -22,6 +22,7 @@ All Sarxina VTuber Toys share a single global variable pointing at the repo root
 3. Click **Import** in the top menu bar
 4. Paste the contents of [`Import This to Streamerbot`](Import%20This%20to%20Streamerbot) into the import box and click **Import**
 5. The action comes with a 1-second Timed Action trigger by default
+6. In **VTube Studio → Settings → API → Streamer.bot**, enable **`Allow loading of custom images as items`**.
 
 ## Configuration
 
@@ -30,6 +31,10 @@ Edit the constants at the top of the code:
 - **`CHANCE_DENOM`** — 1 in N chance per tick (default: `10000`)
 - **`ITEM_SIZE`** — VTS item size (0-1, default: `0.5`)
 - **`ITEM_DURATION_MS`** — how long the jumpscare stays on screen (default: `1200`)
+
+## Troubleshooting
+
+**Trigger fires but no jumpscare appears:** Check that **`Allow loading of custom images as items`** is enabled for the Streamer.bot plugin in VTube Studio's API settings. This is the most common cause.
 
 ## Notes
 
