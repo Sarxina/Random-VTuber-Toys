@@ -9,7 +9,13 @@
     "build": "tsc"
   },
   "dependencies": {
-    "ws": "^8.16.0"
+    "ws": "^8.16.0",
+    "dotenv": "^16.4.0",
+    "@twurple/auth": "^7.4.0",
+    "@twurple/chat": "^7.4.0",
+    "@twurple/api": "^7.4.0",
+    "@twurple/eventsub-ws": "^7.4.0",
+    "@twurple/eventsub-base": "^7.4.0"
   },
   "devDependencies": {
     "typescript": "^5.3.0",

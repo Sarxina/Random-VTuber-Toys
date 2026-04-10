@@ -1,8 +1,14 @@
+import "dotenv/config";
 import WebSocket from "ws";
+import {
+  TwitchChatManager,
+  ChatCommandManager,
+} from "../../../utils/chatgod-js/src/services/TwitchChatManager.js";
 
 const API_URL = "ws://localhost:8004";
 const PLUGIN_NAME = "RandomMovementGenerator";
 const PLUGIN_DEVELOPER = "Sarxina";
+const TRIGGER_COMMAND = "!getdown";
 const FPS = 30;
 const FRAME_INTERVAL = 1000 / FPS; // ms
 
@@ -191,10 +197,16 @@ async function runRandomMovements(ws: WebSocket): Promise<void> {
 
   let frame = 0;
   let elapsed = 0;
+  let timerId: ReturnType<typeof setTimeout> | null = null;
+
+  stopFn = () => {
+    if (timerId) clearTimeout(timerId);
+  };
 
   const techniques = ["snap", "oscillate", "sine_stack", "hold_extreme"] as const;
 
   const tick = (): void => {
+    if (!running) return;
     const frameStart = performance.now();
     frame++;
 
@@ -282,11 +294,14 @@ async function runRandomMovements(ws: WebSocket): Promise<void> {
     elapsed += FRAME_INTERVAL / 1000;
     const frameTime = performance.now() - frameStart;
     const sleepTime = Math.max(0, FRAME_INTERVAL - frameTime);
-    setTimeout(tick, sleepTime);
+    timerId = setTimeout(tick, sleepTime);
   };
 
   tick();
 }
+
+let running = false;
+let stopFn: (() => void) | null = null;
 
 async function main(): Promise<void> {
   console.log(`  Connecting to VTube Studio at ${API_URL}...`);
@@ -304,8 +319,31 @@ async function main(): Promise<void> {
   });
 
   await authenticate(ws);
-  await new Promise((r) => setTimeout(r, 1000));
-  await runRandomMovements(ws);
+
+  const chatManager = new TwitchChatManager(() => {});
+  new ChatCommandManager(
+    TRIGGER_COMMAND,
+    (subcommand, chatter) => {
+      const arg = subcommand.trim().toLowerCase();
+      if (arg === "" || arg === "on") {
+        if (!running) {
+          console.log(`\n  ${chatter} started random movement!`);
+          running = true;
+          runRandomMovements(ws);
+        }
+      } else if (arg === "off") {
+        if (running && stopFn) {
+          console.log(`\n  ${chatter} stopped random movement.`);
+          running = false;
+          stopFn();
+          stopFn = null;
+        }
+      }
+    },
+    chatManager
+  );
+
+  console.log(`  Listening for "${TRIGGER_COMMAND}" in Twitch chat. Ctrl+C to quit.\n`);
 }
 
 main().catch((err) => {

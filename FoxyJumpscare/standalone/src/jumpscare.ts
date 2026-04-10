@@ -1,8 +1,13 @@
+import "dotenv/config";
 import WebSocket from "ws";
 import { readFileSync, existsSync } from "fs";
 import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { exec } from "child_process";
+import {
+  TwitchChatManager,
+  ChatCommandManager,
+} from "../../../utils/chatgod-js/src/services/TwitchChatManager.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -141,16 +146,10 @@ async function triggerJumpscare(ws: WebSocket, gifBase64: string): Promise<void>
   });
 }
 
-async function runLoop(ws: WebSocket): Promise<void> {
-  if (!existsSync(GIF_PATH)) {
-    console.error(`  ERROR: GIF not found at ${GIF_PATH}`);
-    process.exit(1);
-  }
+const TRIGGER_COMMAND = "!jumpscare";
 
-  const gifBytes = readFileSync(GIF_PATH);
-  const gifBase64 = gifBytes.toString("base64");
-  console.log(`  Loaded jumpscare GIF (${Math.floor(gifBytes.length / 1024)} KB)`);
-  console.log(`  Rolling 1/${CHANCE_DENOM} every ${TICK_INTERVAL / 1000}s. Ctrl+C to stop.\n`);
+async function runLoop(ws: WebSocket, gifBase64: string): Promise<void> {
+  console.log(`  Rolling 1/${CHANCE_DENOM} every ${TICK_INTERVAL / 1000}s...\n`);
 
   let ticks = 0;
   while (true) {
@@ -185,8 +184,31 @@ async function main(): Promise<void> {
   });
 
   await authenticate(ws);
-  await new Promise((r) => setTimeout(r, 1000));
-  await runLoop(ws);
+
+  if (!existsSync(GIF_PATH)) {
+    console.error(`  ERROR: GIF not found at ${GIF_PATH}`);
+    process.exit(1);
+  }
+
+  const gifBytes = readFileSync(GIF_PATH);
+  const gifBase64 = gifBytes.toString("base64");
+  console.log(`  Loaded jumpscare GIF (${Math.floor(gifBytes.length / 1024)} KB)`);
+
+  // Chat command to force a jumpscare
+  const chatManager = new TwitchChatManager(() => {});
+  new ChatCommandManager(
+    TRIGGER_COMMAND,
+    (_subcommand, chatter) => {
+      console.log(`\n  ${chatter} forced a jumpscare!`);
+      triggerJumpscare(ws, gifBase64);
+    },
+    chatManager
+  );
+
+  console.log(`  Listening for "${TRIGGER_COMMAND}" in Twitch chat.`);
+
+  // Random roll loop runs in parallel
+  await runLoop(ws, gifBase64);
 }
 
 main().catch((err) => {

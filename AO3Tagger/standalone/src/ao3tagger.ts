@@ -1,6 +1,10 @@
+import "dotenv/config";
 import WebSocket from "ws";
-import { createCanvas, registerFont } from "canvas";
-import * as readline from "readline";
+import { createCanvas } from "canvas";
+import {
+  TwitchChatManager,
+  ChatCommandManager,
+} from "../../../utils/chatgod-js/src/services/TwitchChatManager.js";
 
 const API_URL = "ws://localhost:8001";
 const PLUGIN_NAME = "AO3Tagger";
@@ -239,14 +243,11 @@ async function displayTags(ws: WebSocket): Promise<void> {
   }
 }
 
-async function handleCommand(ws: WebSocket, message: string): Promise<void> {
-  const lower = message.trim().toLowerCase();
-  if (!lower.startsWith(TRIGGER_COMMAND)) return;
+async function handleSubcommand(ws: WebSocket, subcommand: string): Promise<void> {
+  const arg = subcommand.trim();
+  const lower = arg.toLowerCase();
 
-  let arg = message.trim();
-  arg = arg.length > TRIGGER_COMMAND.length ? arg.slice(TRIGGER_COMMAND.length).trim() : "";
-
-  if (lower === `${TRIGGER_COMMAND} clear` || lower === `${TRIGGER_COMMAND} off`) {
+  if (lower === "clear" || lower === "off") {
     tags.length = 0;
     await unloadCurrentItem(ws);
     console.log("  Tags cleared.");
@@ -267,7 +268,7 @@ async function main(): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     ws.on("open", resolve);
-    ws.on("error", (err) => {
+    ws.on("error", () => {
       console.error("  Could not connect to VTube Studio.");
       console.error("  Make sure VTube Studio is running and the API is enabled.");
       console.error(`  Settings > General Settings > Start API (check port matches ${API_URL})`);
@@ -277,28 +278,16 @@ async function main(): Promise<void> {
 
   await authenticate(ws);
 
-  console.log(`\n  Type tags and press Enter. 'clear' to reset. Ctrl+C to quit.\n`);
+  const chatManager = new TwitchChatManager(() => {});
+  new ChatCommandManager(
+    TRIGGER_COMMAND,
+    (subcommand, _chatter) => {
+      handleSubcommand(ws, subcommand);
+    },
+    chatManager
+  );
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-
-  const askLine = (): void => {
-    rl.question("  > ", async (line) => {
-      line = line.trim();
-      if (!line) {
-        askLine();
-        return;
-      }
-      if (line.toLowerCase() === "clear" || line.toLowerCase() === "off") {
-        line = `${TRIGGER_COMMAND} ${line}`;
-      } else if (!line.toLowerCase().startsWith(TRIGGER_COMMAND)) {
-        line = `${TRIGGER_COMMAND} ${line}`;
-      }
-      await handleCommand(ws, line);
-      askLine();
-    });
-  };
-
-  askLine();
+  console.log(`  Listening for "${TRIGGER_COMMAND}" in Twitch chat. Ctrl+C to quit.\n`);
 }
 
 main().catch((err) => {
