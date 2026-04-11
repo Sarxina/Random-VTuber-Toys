@@ -1,7 +1,6 @@
 {
-  "name": "ao3tagger-standalone",
-  "version": "1.0.0",
-  "private": true,
+  "name": "@sarxina/ao3tagger",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "start": "tsx src/ao3tagger.ts",

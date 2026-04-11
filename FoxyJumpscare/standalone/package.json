@@ -1,7 +1,6 @@
 {
-  "name": "foxyjumpscare-standalone",
-  "version": "1.0.0",
-  "private": true,
+  "name": "@sarxina/foxyjumpscare",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "start": "tsx src/jumpscare.ts",
