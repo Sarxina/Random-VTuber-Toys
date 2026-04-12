@@ -49,7 +49,7 @@ jobs:
 
       - name: Commit version bump
         run: |
-          git add package.json package-lock.json
+          git add AO3Tagger/standalone/package.json AO3Tagger/standalone/package-lock.json || true
           git commit -m "chore: release @sarxina/ao3tagger@${{ env.NEW_VERSION }} [skip ci]"
           git tag "ao3tagger-v${{ env.NEW_VERSION }}"
           git push
