@@ -1,25 +1,37 @@
 {
   "name": "@sarxina/ao3tagger",
   "version": "0.1.0",
+  "description": "A VTube Studio plugin that displays AO3-style tags as an overlay on your model",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "start": "tsx src/ao3tagger.ts",
-    "build": "tsc"
+    "start": "tsx src/standalone.ts",
+    "build": "tsc",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
-    "ws": "^8.16.0",
+    "@sarxina/sarxina-tools": "^0.1.5",
     "canvas": "^2.11.2",
-    "dotenv": "^16.4.0",
-    "@twurple/auth": "^7.4.0",
-    "@twurple/chat": "^7.4.0",
-    "@twurple/api": "^7.4.0",
-    "@twurple/eventsub-ws": "^7.4.0",
-    "@twurple/eventsub-base": "^7.4.0"
+    "dotenv": "^16.4.0"
   },
   "devDependencies": {
-    "typescript": "^5.3.0",
-    "tsx": "^4.7.0",
-    "@types/ws": "^8.5.10",
-    "@types/node": "^20.11.0"
-  }
+    "typescript": "^5.6.0",
+    "tsx": "^4.20.0",
+    "@types/node": "^22.0.0"
+  },
+  "author": "Sarxina",
+  "license": "ISC"
 }

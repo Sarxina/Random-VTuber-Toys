@@ -1,24 +1,39 @@
 {
   "name": "@sarxina/foxyjumpscare",
   "version": "0.1.0",
+  "description": "A VTube Studio plugin that randomly triggers a jumpscare with a gif and sound",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "assets"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "start": "tsx src/jumpscare.ts",
-    "build": "tsc"
+    "prestart": "node scripts/copy-assets.mjs",
+    "start": "tsx src/standalone.ts",
+    "prebuild": "node scripts/copy-assets.mjs",
+    "build": "tsc",
+    "clean": "rm -rf dist assets"
   },
   "dependencies": {
-    "ws": "^8.16.0",
-    "dotenv": "^16.4.0",
-    "@twurple/auth": "^7.4.0",
-    "@twurple/chat": "^7.4.0",
-    "@twurple/api": "^7.4.0",
-    "@twurple/eventsub-ws": "^7.4.0",
-    "@twurple/eventsub-base": "^7.4.0"
+    "@sarxina/sarxina-tools": "^0.1.5",
+    "dotenv": "^16.4.0"
   },
   "devDependencies": {
-    "typescript": "^5.3.0",
-    "tsx": "^4.7.0",
-    "@types/ws": "^8.5.10",
-    "@types/node": "^20.11.0"
-  }
+    "typescript": "^5.6.0",
+    "tsx": "^4.20.0",
+    "@types/node": "^22.0.0"
+  },
+  "author": "Sarxina",
+  "license": "ISC"
 }
