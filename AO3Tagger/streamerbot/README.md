@@ -17,7 +17,7 @@ A ready-to-import Streamer.bot action. Renders AO3-style tags as an image and pi
 
 **Command runs but nothing appears on the model:** Check that **`Allow loading of custom images as items`** is enabled for the Streamer.bot plugin in VTube Studio's API settings. This is the most common cause.
 
-**Tags appear in the wrong place (or not on the forehead):** The plugin tries to auto-detect your forehead, but every model is different and it doesn't always get it right. To set it manually:
+**Tags do not appear, or appear in the wrong place:** The plugin tries to auto-detect your forehead, but every model is different and it doesn't always get it right. To set it manually:
 
 1. Open the AO3Tagger action in Streamer.bot
 2. Find the **Model Clicked** trigger (it should be disabled by default)
