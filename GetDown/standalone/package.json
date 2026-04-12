@@ -1,6 +1,6 @@
 {
   "name": "@sarxina/getdown",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "VTube Studio plugins that make your model go unhinged — random movement generator and physics breaker",
   "type": "module",
   "main": "./dist/index.js",
@@ -35,4 +35,3 @@
   "author": "Sarxina",
   "license": "ISC"
 }
-
