@@ -1,0 +1,62 @@
+name: Publish AO3Tagger
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "AO3Tagger/standalone/**"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    defaults:
+      run:
+        working-directory: AO3Tagger/standalone
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        working-directory: .
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Bump patch version
+        run: |
+          npm version patch --no-git-tag-version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Commit version bump
+        run: |
+          git add package.json package-lock.json
+          git commit -m "chore: release @sarxina/ao3tagger@${{ env.NEW_VERSION }} [skip ci]"
+          git tag "ao3tagger-v${{ env.NEW_VERSION }}"
+          git push
+          git push --tags
+        working-directory: .
+
+      - name: Publish to npm
+        run: npm publish --access public --provenance
+        env:
+          NPM_CONFIG_PROVENANCE: "true"
