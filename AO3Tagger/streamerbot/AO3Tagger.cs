@@ -76,6 +76,25 @@ public class CPHInline
 
     private bool HandleCalibrationClick()
     {
+        // DEBUG: Dump all args to a file so we can see what Streamer.bot provides
+        try
+        {
+            string repoRoot = CPH.GetGlobalVar<string>("SARXINA_TOYS", false) ?? ".";
+            string logPath = System.IO.Path.Combine(repoRoot, "AO3Tagger", "debug.log");
+            var lines = new List<string>();
+            lines.Add("=== Model Click Args (" + DateTime.Now.ToString() + ") ===");
+            foreach (var kvp in args)
+            {
+                lines.Add(kvp.Key + " (" + (kvp.Value?.GetType()?.Name ?? "null") + ") = " + kvp.Value);
+            }
+            System.IO.File.WriteAllLines(logPath, lines);
+            CPH.SendMessage("Debug: args dumped to debug.log in AO3Tagger folder");
+        }
+        catch (Exception ex)
+        {
+            CPH.SendMessage("Debug dump failed: " + ex.Message);
+        }
+
         // Streamer.bot exposes the ModelClickedEvent data as args.
         // The exact variable names depend on how Streamer.bot flattens
         // the JSON. Try the most likely patterns.
