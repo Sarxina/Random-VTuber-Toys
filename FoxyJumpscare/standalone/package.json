@@ -1,6 +1,6 @@
 {
   "name": "@sarxina/foxyjumpscare",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A VTube Studio plugin that randomly triggers a jumpscare with a gif and sound",
   "type": "module",
   "main": "./dist/index.js",
@@ -41,4 +41,3 @@
   "author": "Sarxina",
   "license": "ISC"
 }
-
