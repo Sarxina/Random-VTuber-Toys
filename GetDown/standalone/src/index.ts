@@ -1,17 +1,13 @@
-import type { TwitchChatManager, VTSClient, ModelParameter } from "@sarxina/sarxina-tools";
-import { ChatCommandManager } from "@sarxina/sarxina-tools";
+import type { VTSClient, ModelParameter } from "@sarxina/sarxina-tools";
 
 // --- Public types ---
 
 export interface GetDownContext {
-    chat: TwitchChatManager;
     vts: VTSClient;
     config?: GetDownConfig;
 }
 
 export interface GetDownConfig {
-    /** Chat command to toggle on/off. Default "!getdown". */
-    triggerCommand?: string;
     /** Frames per second for the animation loop. Default 30. */
     fps?: number;
 }
@@ -82,7 +78,6 @@ function printParams(paramValues: ParamValue[], frame: number): void {
 
 export function startToy(ctx: GetDownContext): ToyHandle {
     const config = ctx.config ?? {};
-    const triggerCommand = config.triggerCommand ?? "!getdown";
     const fps = config.fps ?? 30;
     const frameInterval = 1000 / fps;
 
@@ -216,32 +211,11 @@ export function startToy(ctx: GetDownContext): ToyHandle {
         tick();
     };
 
-    // Chat command to toggle on/off
-    new ChatCommandManager(
-        triggerCommand,
-        (subcommand, chatter) => {
-            const arg = subcommand.trim().toLowerCase();
-            if (arg === "" || arg === "on") {
-                if (!running) {
-                    console.log(`\n  ${chatter} started random movement!`);
-                    running = true;
-                    void runRandomMovements();
-                }
-            } else if (arg === "off") {
-                if (running) {
-                    console.log(`\n  ${chatter} stopped random movement.`);
-                    running = false;
-                    if (animationTimerId) {
-                        clearTimeout(animationTimerId);
-                        animationTimerId = null;
-                    }
-                }
-            }
-        },
-        ctx.chat
-    );
+    // Start immediately
+    running = true;
+    void runRandomMovements();
 
-    console.log(`  GetDown running — listening for "${triggerCommand}" in Twitch chat`);
+    console.log("  GetDown running");
 
     return {
         stop: async () => {
