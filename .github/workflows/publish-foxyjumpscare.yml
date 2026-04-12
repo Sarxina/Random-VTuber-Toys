@@ -55,6 +55,7 @@ jobs:
           git add FoxyJumpscare/standalone/package.json FoxyJumpscare/standalone/package-lock.json || true
           git commit -m "chore: release @sarxina/foxyjumpscare@${{ env.NEW_VERSION }} [skip ci]"
           git tag "foxyjumpscare-v${{ env.NEW_VERSION }}"
+          git pull --rebase origin main || true
           git push
           git push --tags
         working-directory: .

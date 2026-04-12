@@ -52,6 +52,7 @@ jobs:
           git add GetDown/standalone/package.json GetDown/standalone/package-lock.json || true
           git commit -m "chore: release @sarxina/getdown@${{ env.NEW_VERSION }} [skip ci]"
           git tag "getdown-v${{ env.NEW_VERSION }}"
+          git pull --rebase origin main || true
           git push
           git push --tags
         working-directory: .
