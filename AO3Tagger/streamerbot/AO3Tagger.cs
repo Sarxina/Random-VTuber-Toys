@@ -62,11 +62,8 @@ public class CPHInline
 
     public bool Execute()
     {
-        // Check if this was triggered by a model click (calibration)
-        bool isModelClick = false;
-        CPH.TryGetArg("modelWasClicked", out isModelClick);
-
-        if (isModelClick)
+        CPH.TryGetArg("triggerName", out string triggerName);
+        if (triggerName == "Model Clicked")
             return HandleCalibrationClick();
 
         return HandleChatCommand();
@@ -76,86 +73,32 @@ public class CPHInline
 
     private bool HandleCalibrationClick()
     {
-        // DEBUG: Dump all args to a file so we can see what Streamer.bot provides
-        try
-        {
-            string repoRoot = CPH.GetGlobalVar<string>("SARXINA_TOYS", false) ?? ".";
-            string logPath = System.IO.Path.Combine(repoRoot, "AO3Tagger", "debug.log");
-            var lines = new List<string>();
-            lines.Add("=== Model Click Args (" + DateTime.Now.ToString() + ") ===");
-            foreach (var kvp in args)
-            {
-                lines.Add(kvp.Key + " (" + (kvp.Value?.GetType()?.Name ?? "null") + ") = " + kvp.Value);
-            }
-            System.IO.File.WriteAllLines(logPath, lines);
-            CPH.SendMessage("Debug: args dumped to debug.log in AO3Tagger folder");
-        }
-        catch (Exception ex)
-        {
-            CPH.SendMessage("Debug dump failed: " + ex.Message);
-        }
+        CPH.TryGetArg("artMesh0.hitInfo.artMeshId", out string artMeshId);
+        CPH.TryGetArg("artMesh0.hitInfo.modelId", out string modelId);
+        CPH.TryGetArg("artMesh0.hitInfo.vertexId1", out double v1);
+        CPH.TryGetArg("artMesh0.hitInfo.vertexId2", out double v2);
+        CPH.TryGetArg("artMesh0.hitInfo.vertexId3", out double v3);
+        CPH.TryGetArg("artMesh0.hitInfo.vertexWeight1", out double w1);
+        CPH.TryGetArg("artMesh0.hitInfo.vertexWeight2", out double w2);
+        CPH.TryGetArg("artMesh0.hitInfo.vertexWeight3", out double w3);
 
-        // Streamer.bot exposes the ModelClickedEvent data as args.
-        // The exact variable names depend on how Streamer.bot flattens
-        // the JSON. Try the most likely patterns.
-        //
-        // If this doesn't work on your version, add a test action that
-        // dumps all args to find the exact names:
-        //   foreach (var kvp in args)
-        //       CPH.LogInfo($"{kvp.Key} = {kvp.Value}");
-
-        string artMeshID = "";
-        string modelID = "";
-        string vertexID1 = "0", vertexID2 = "0", vertexID3 = "0";
-        string vertexWeight1 = "0", vertexWeight2 = "0", vertexWeight3 = "0";
-
-        // Pattern 1: Streamer.bot flattens with dot notation
-        if (CPH.TryGetArg("artMeshHits.0.hitInfo.artMeshID", out string dotArtMesh))
-        {
-            artMeshID = dotArtMesh;
-            CPH.TryGetArg("artMeshHits.0.hitInfo.modelID", out modelID);
-            CPH.TryGetArg("artMeshHits.0.hitInfo.vertexID1", out vertexID1);
-            CPH.TryGetArg("artMeshHits.0.hitInfo.vertexID2", out vertexID2);
-            CPH.TryGetArg("artMeshHits.0.hitInfo.vertexID3", out vertexID3);
-            CPH.TryGetArg("artMeshHits.0.hitInfo.vertexWeight1", out vertexWeight1);
-            CPH.TryGetArg("artMeshHits.0.hitInfo.vertexWeight2", out vertexWeight2);
-            CPH.TryGetArg("artMeshHits.0.hitInfo.vertexWeight3", out vertexWeight3);
-        }
-        // Pattern 2: Streamer.bot uses bracket notation
-        else if (CPH.TryGetArg("artMeshHits[0].hitInfo.artMeshID", out string bracketArtMesh))
-        {
-            artMeshID = bracketArtMesh;
-            CPH.TryGetArg("artMeshHits[0].hitInfo.modelID", out modelID);
-            CPH.TryGetArg("artMeshHits[0].hitInfo.vertexID1", out vertexID1);
-            CPH.TryGetArg("artMeshHits[0].hitInfo.vertexID2", out vertexID2);
-            CPH.TryGetArg("artMeshHits[0].hitInfo.vertexID3", out vertexID3);
-            CPH.TryGetArg("artMeshHits[0].hitInfo.vertexWeight1", out vertexWeight1);
-            CPH.TryGetArg("artMeshHits[0].hitInfo.vertexWeight2", out vertexWeight2);
-            CPH.TryGetArg("artMeshHits[0].hitInfo.vertexWeight3", out vertexWeight3);
-        }
-        else
-        {
-            // Could not find artmesh data — log all args for debugging
-            CPH.LogWarn("AO3Tagger: Could not find artmesh hit data in Model Clicked args.");
-            CPH.LogWarn("AO3Tagger: Please run a test action that dumps all args to find the correct variable names.");
-            CPH.SendMessage("Could not read the click data. Check Streamer.bot logs for details.");
+        if (string.IsNullOrEmpty(artMeshId))
             return true;
-        }
 
-        if (string.IsNullOrEmpty(artMeshID))
-        {
-            CPH.SendMessage("Click didn't land on the model. Try again!");
-            return true;
-        }
+        // Save precise forehead location — always overwrites
+        string foreheadJson = "{\"type\":\"precise\""
+            + ",\"artMeshId\":\"" + artMeshId + "\""
+            + ",\"modelId\":\"" + (modelId ?? "") + "\""
+            + ",\"vertexId1\":" + v1
+            + ",\"vertexId2\":" + v2
+            + ",\"vertexId3\":" + v3
+            + ",\"vertexWeight1\":" + w1
+            + ",\"vertexWeight2\":" + w2
+            + ",\"vertexWeight3\":" + w3
+            + "}";
 
-        // Save to config
-        var config = LoadConfig();
-        config["foreheadPin"] = artMeshID + "|" + (modelID ?? "")
-            + "|" + vertexID1 + "|" + vertexID2 + "|" + vertexID3
-            + "|" + vertexWeight1 + "|" + vertexWeight2 + "|" + vertexWeight3;
-        SaveConfig(config);
-
-        CPH.SendMessage("Forehead position saved! You can now disable the Model Clicked trigger.");
+        SaveConfigValue("foreheadLocation", foreheadJson);
+        CPH.SendMessage("Forehead position saved! You can disable the Model Clicked trigger now.");
         return true;
     }
 
@@ -194,10 +137,8 @@ public class CPHInline
 
         if (lower == "!ao3tag reset")
         {
-            var config = LoadConfig();
-            config.Remove("foreheadPin");
-            SaveConfig(config);
-            CPH.SendMessage("Forehead position reset. It will auto-detect next time, or enable the Model Clicked trigger to set it manually.");
+            RemoveConfigValue("foreheadLocation");
+            CPH.SendMessage("Forehead position reset.");
             return true;
         }
 
@@ -206,7 +147,7 @@ public class CPHInline
         tags.Add(arg);
         CPH.SetGlobalVar(TAGS_VAR, string.Join("|", tags), false);
 
-        // Render and display
+        // Render
         byte[] pngBytes = RenderTagImage(tags);
         if (pngBytes == null) return false;
 
@@ -236,7 +177,6 @@ public class CPHInline
 
         CPH.SetGlobalVar(ITEM_ID_VAR, instanceId, false);
 
-        // Try to pin
         PinItem(instanceId);
 
         return true;
@@ -246,56 +186,95 @@ public class CPHInline
 
     private void PinItem(string instanceId)
     {
-        // First check for a saved calibration pin
-        var config = LoadConfig();
-        if (config.ContainsKey("foreheadPin"))
+        // 1. Check for saved foreheadLocation
+        string foreheadJson = GetConfigValue("foreheadLocation");
+        if (!string.IsNullOrEmpty(foreheadJson))
         {
-            string pinData = config["foreheadPin"];
-            string[] parts = pinData.Split('|');
-            if (parts.Length >= 8)
+            string type = ExtractJsonValue(foreheadJson, "type");
+            string artMeshId = ExtractJsonValue(foreheadJson, "artMeshId");
+
+            if (type == "precise")
             {
-                PinWithVertexData(instanceId, parts[0], parts[1],
-                    parts[2], parts[3], parts[4],
-                    parts[5], parts[6], parts[7]);
+                PinWithVertexData(instanceId, artMeshId,
+                    ExtractJsonValue(foreheadJson, "modelId"),
+                    ExtractJsonNumber(foreheadJson, "vertexId1"),
+                    ExtractJsonNumber(foreheadJson, "vertexId2"),
+                    ExtractJsonNumber(foreheadJson, "vertexId3"),
+                    ExtractJsonNumber(foreheadJson, "vertexWeight1"),
+                    ExtractJsonNumber(foreheadJson, "vertexWeight2"),
+                    ExtractJsonNumber(foreheadJson, "vertexWeight3"));
+                return;
+            }
+            else if (type == "center" && !string.IsNullOrEmpty(artMeshId))
+            {
+                PinToMeshCenter(instanceId, artMeshId);
                 return;
             }
         }
 
-        // No saved pin — try auto-detect
+        // 2. No saved location — try auto-detect
         string resp = CPH.VTubeStudioSendRawRequest("ArtMeshListRequest", "{}");
-        if (string.IsNullOrEmpty(resp)) return;
+        if (string.IsNullOrEmpty(resp))
+        {
+            ShowCannotFindPopup();
+            return;
+        }
 
         List<string> meshes = ExtractArtMeshNames(resp);
+        string foundMesh = FindBestForeheadMesh(meshes);
 
+        if (!string.IsNullOrEmpty(foundMesh))
+        {
+            // Save as center type for next time
+            string centerJson = "{\"type\":\"center\",\"artMeshId\":\"" + foundMesh + "\"}";
+            SaveConfigValue("foreheadLocation", centerJson);
+            PinToMeshCenter(instanceId, foundMesh);
+            return;
+        }
+
+        // 3. Auto-detect failed — show popup in VTS
+        ShowCannotFindPopup();
+    }
+
+    private string FindBestForeheadMesh(List<string> meshes)
+    {
         foreach (string[] patterns in FALLBACK_PATTERNS)
         {
             foreach (string pattern in patterns)
             {
-                // Find a center mesh (no left/right) first
+                // Prefer center meshes (no left/right)
                 string centerMatch = meshes.Find(m =>
-                    m.ToLower().Contains(pattern.ToLower())
-                    && !m.ToLower().Contains("left")
-                    && !m.ToLower().Contains("right")
-                    && !m.ToLower().Contains("_l_")
-                    && !m.ToLower().Contains("_r_"));
+                    m.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0
+                    && m.IndexOf("left", StringComparison.OrdinalIgnoreCase) < 0
+                    && m.IndexOf("right", StringComparison.OrdinalIgnoreCase) < 0
+                    && m.IndexOf("_l_", StringComparison.OrdinalIgnoreCase) < 0
+                    && m.IndexOf("_r_", StringComparison.OrdinalIgnoreCase) < 0);
 
                 if (!string.IsNullOrEmpty(centerMatch))
-                {
-                    PinToMeshCenter(instanceId, centerMatch);
-                    return;
-                }
+                    return centerMatch;
 
                 // Fall back to any match
-                string anyMatch = meshes.Find(m => m.ToLower().Contains(pattern.ToLower()));
+                string anyMatch = meshes.Find(m =>
+                    m.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0);
+
                 if (!string.IsNullOrEmpty(anyMatch))
-                {
-                    PinToMeshCenter(instanceId, anyMatch);
-                    return;
-                }
+                    return anyMatch;
             }
         }
+        return null;
+    }
 
-        // Nothing found — no pin, item floats at load position
+    private void ShowCannotFindPopup()
+    {
+        string selectJson = "{\"textOverride\":\"Hey! AO3Tagger couldn't find your forehead mesh. "
+            + "Could you close this, go to Streamer.bot, enable the Model Clicked trigger, "
+            + "and click on your forehead? Check the green comment in the action for details!\""
+            + ",\"helpOverride\":\"AO3Tagger needs to know where your forehead is to pin tags there. "
+            + "Close this popup, then follow the instructions in the green comment at the top of the AO3Tagger action in Streamer.bot.\""
+            + ",\"requestedArtMeshCount\":0"
+            + ",\"activeArtMeshes\":[]}";
+
+        CPH.VTubeStudioSendRawRequest("ArtMeshSelectionRequest", selectJson);
     }
 
     private void PinToMeshCenter(string instanceId, string artMeshId)
@@ -331,37 +310,129 @@ public class CPHInline
         CPH.VTubeStudioSendRawRequest("ItemPinRequest", pinJson);
     }
 
-    // ===== CONFIG (SARXINA_CONFIG) =====
+    // ===== SARXINA_CONFIG =====
 
-    private Dictionary<string, string> LoadConfig()
+    private string GetConfigValue(string key)
     {
         string raw = CPH.GetGlobalVar<string>(CONFIG_VAR, false) ?? "{}";
-        var result = new Dictionary<string, string>();
-        // Simple key:value parser (no nested objects)
-        raw = raw.Trim().TrimStart('{').TrimEnd('}');
-        if (string.IsNullOrEmpty(raw)) return result;
 
-        foreach (string pair in raw.Split(','))
+        string search = "\"" + key + "\":";
+        int idx = raw.IndexOf(search);
+        if (idx < 0) return null;
+
+        idx += search.Length;
+        while (idx < raw.Length && raw[idx] == ' ') idx++;
+        if (idx >= raw.Length) return null;
+
+        if (raw[idx] == '{')
         {
-            string[] kv = pair.Split(new[] { ':' }, 2);
-            if (kv.Length == 2)
+            int depth = 0;
+            int start = idx;
+            for (int i = idx; i < raw.Length; i++)
             {
-                string key = kv[0].Trim().Trim('"');
-                string val = kv[1].Trim().Trim('"');
-                result[key] = val;
+                if (raw[i] == '{') depth++;
+                else if (raw[i] == '}') depth--;
+                if (depth == 0) return raw.Substring(start, i - start + 1);
             }
+            return null;
         }
-        return result;
+
+        int valStart = idx;
+        if (raw[idx] == '"')
+        {
+            valStart++;
+            int end = raw.IndexOf('"', valStart);
+            return end >= 0 ? raw.Substring(valStart, end - valStart) : null;
+        }
+
+        int valEnd = raw.IndexOfAny(new[] { ',', '}' }, valStart);
+        return valEnd >= 0 ? raw.Substring(valStart, valEnd - valStart).Trim() : null;
     }
 
-    private void SaveConfig(Dictionary<string, string> config)
+    private void SaveConfigValue(string key, string jsonValue)
     {
-        var pairs = new List<string>();
-        foreach (var kvp in config)
+        string raw = CPH.GetGlobalVar<string>(CONFIG_VAR, false) ?? "{}";
+
+        string search = "\"" + key + "\":";
+        int idx = raw.IndexOf(search);
+        if (idx >= 0)
         {
-            pairs.Add("\"" + kvp.Key + "\":\"" + kvp.Value + "\"");
+            int valueStart = idx + search.Length;
+            while (valueStart < raw.Length && raw[valueStart] == ' ') valueStart++;
+
+            int valueEnd = valueStart;
+            if (valueStart < raw.Length && raw[valueStart] == '{')
+            {
+                int depth = 0;
+                for (int i = valueStart; i < raw.Length; i++)
+                {
+                    if (raw[i] == '{') depth++;
+                    else if (raw[i] == '}') depth--;
+                    if (depth == 0) { valueEnd = i + 1; break; }
+                }
+            }
+            else
+            {
+                valueEnd = raw.IndexOfAny(new[] { ',', '}' }, valueStart);
+                if (valueEnd < 0) valueEnd = raw.Length;
+            }
+
+            int removeStart = idx;
+            int removeEnd = valueEnd;
+            if (removeEnd < raw.Length && raw[removeEnd] == ',') removeEnd++;
+            else if (removeStart > 0 && raw[removeStart - 1] == ',') removeStart--;
+
+            raw = raw.Remove(removeStart, removeEnd - removeStart);
         }
-        CPH.SetGlobalVar(CONFIG_VAR, "{" + string.Join(",", pairs) + "}", false);
+
+        raw = raw.TrimEnd();
+        if (raw.EndsWith("}"))
+        {
+            string inner = raw.Substring(1, raw.Length - 2).Trim();
+            if (string.IsNullOrEmpty(inner))
+                raw = "{\"" + key + "\":" + jsonValue + "}";
+            else
+                raw = "{" + inner + ",\"" + key + "\":" + jsonValue + "}";
+        }
+
+        CPH.SetGlobalVar(CONFIG_VAR, raw, false);
+    }
+
+    private void RemoveConfigValue(string key)
+    {
+        string raw = CPH.GetGlobalVar<string>(CONFIG_VAR, false) ?? "{}";
+
+        string search = "\"" + key + "\":";
+        int idx = raw.IndexOf(search);
+        if (idx < 0) return;
+
+        int valueStart = idx + search.Length;
+        while (valueStart < raw.Length && raw[valueStart] == ' ') valueStart++;
+
+        int valueEnd = valueStart;
+        if (valueStart < raw.Length && raw[valueStart] == '{')
+        {
+            int depth = 0;
+            for (int i = valueStart; i < raw.Length; i++)
+            {
+                if (raw[i] == '{') depth++;
+                else if (raw[i] == '}') depth--;
+                if (depth == 0) { valueEnd = i + 1; break; }
+            }
+        }
+        else
+        {
+            valueEnd = raw.IndexOfAny(new[] { ',', '}' }, valueStart);
+            if (valueEnd < 0) valueEnd = raw.Length;
+        }
+
+        int removeStart = idx;
+        int removeEnd = valueEnd;
+        if (removeEnd < raw.Length && raw[removeEnd] == ',') removeEnd++;
+        else if (removeStart > 0 && raw[removeStart - 1] == ',') removeStart--;
+
+        raw = raw.Remove(removeStart, removeEnd - removeStart);
+        CPH.SetGlobalVar(CONFIG_VAR, raw, false);
     }
 
     // ===== RENDERING =====
@@ -508,6 +579,17 @@ public class CPHInline
         int end = json.IndexOf("\"", start);
         if (end < 0) return "";
         return json.Substring(start, end - start);
+    }
+
+    private string ExtractJsonNumber(string json, string key)
+    {
+        string search = "\"" + key + "\":";
+        int start = json.IndexOf(search);
+        if (start < 0) return "0";
+        start += search.Length;
+        int end = json.IndexOfAny(new[] { ',', '}', ' ' }, start);
+        if (end < 0) return "0";
+        return json.Substring(start, end - start).Trim();
     }
 
     private List<string> ExtractArtMeshNames(string json)
