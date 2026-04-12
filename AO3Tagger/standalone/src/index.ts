@@ -1,6 +1,6 @@
 import type { TwitchChatManager, VTSClient, ClickPinResult } from "@sarxina/sarxina-tools";
 import { ChatCommandManager } from "@sarxina/sarxina-tools";
-import { createCanvas } from "canvas";
+import { createCanvas } from "@napi-rs/canvas";
 
 // --- Rendering config (matched to Streamer.bot version) ---
 
