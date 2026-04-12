@@ -1,12 +1,13 @@
-import type { TwitchChatManager, VTSClient } from "@sarxina/sarxina-tools";
+import type { TwitchChatManager, VTSClient, ClickPinResult } from "@sarxina/sarxina-tools";
 import { ChatCommandManager } from "@sarxina/sarxina-tools";
 import { createCanvas } from "canvas";
 
-// --- Rendering config ---
+// --- Rendering config (matched to Streamer.bot version) ---
 
 const FONT_SIZE = 13;
 const MAX_WIDTH = 500;
-const PADDING = 12;
+const PADDING_H = 12;
+const PADDING_V = 4;
 const LINE_SPACING = 1.35;
 
 const TAG_COLOR = "rgb(153, 0, 0)";
@@ -18,16 +19,17 @@ const BG_COLOR = "rgb(255, 255, 255)";
 export interface AO3TaggerContext {
     chat: TwitchChatManager;
     vts: VTSClient;
+    /** Exact pin coordinates from a user click. If provided, tags are pinned
+     *  to this exact spot. If not, tags are loaded without pinning. */
+    foreheadPin?: ClickPinResult;
     config?: AO3TaggerConfig;
 }
 
 export interface AO3TaggerConfig {
     /** Chat command that adds/clears tags. Default "!ao3tag". */
     triggerCommand?: string;
-    /** Size of the tag overlay in VTS (0-1). Default 0.32. */
+    /** Size of the tag overlay in VTS (0-1). Default 0.42. */
     itemSize?: number;
-    /** Art mesh name patterns to search for when pinning to the head. */
-    pinPatterns?: string[];
 }
 
 export interface ToyHandle {
@@ -39,8 +41,7 @@ export interface ToyHandle {
 export function startToy(ctx: AO3TaggerContext): ToyHandle {
     const config = ctx.config ?? {};
     const triggerCommand = config.triggerCommand ?? "!ao3tag";
-    const itemSize = config.itemSize ?? 0.32;
-    const pinPatterns = config.pinPatterns ?? ["forehead", "eyebrow", "brow", "nose", "face"];
+    const itemSize = config.itemSize ?? 0.42;
 
     const tags: string[] = [];
     let currentItemId: string | null = null;
@@ -70,20 +71,21 @@ export function startToy(ctx: AO3TaggerContext): ToyHandle {
             currentItemId = await ctx.vts.loadItem({
                 fileName: "ao3taggerimg.png",
                 customDataBase64: b64,
-                positionY: 0.5,
+                positionX: 0,
+                positionY: 0.7,
                 size: itemSize,
                 fadeTime: 0.1,
                 order: 25,
+                customDataAskUserFirst: false,
+                customDataSkipAskingUserIfWhitelisted: true,
             });
 
-            // Pin to head
-            const pinMesh = await ctx.vts.findArtMesh(pinPatterns);
-            if (pinMesh && currentItemId) {
-                await ctx.vts.pinItem(currentItemId, {
-                    artMeshID: pinMesh,
+            // Pin to the exact forehead position if we have it
+            if (ctx.foreheadPin && currentItemId) {
+                await ctx.vts.pinItemExact(currentItemId, ctx.foreheadPin, {
                     size: itemSize,
                 });
-                console.log(`  Pinned to ${pinMesh}`);
+                console.log(`  Pinned to ${ctx.foreheadPin.artMeshID}`);
             }
         } catch (err) {
             console.error(`  Failed to display tags: ${err instanceof Error ? err.message : err}`);
@@ -125,11 +127,11 @@ export function startToy(ctx: AO3TaggerContext): ToyHandle {
     };
 }
 
-// --- Rendering ---
+// --- Rendering (matched to Streamer.bot C# version) ---
 
 function renderTagImage(tagList: string[]): Buffer {
     const font = `${FONT_SIZE}px Verdana, sans-serif`;
-    const contentWidth = MAX_WIDTH - PADDING * 2;
+    const contentWidth = MAX_WIDTH - PADDING_H * 2;
     const lineHeight = Math.floor(FONT_SIZE * LINE_SPACING);
 
     // Measure tags
@@ -165,20 +167,37 @@ function renderTagImage(tagList: string[]): Buffer {
         lines.push(currentLine);
     }
 
-    // Render
-    const totalHeight = Math.max(64, PADDING * 2 + lines.length * lineHeight);
-    const totalWidth = Math.max(64, MAX_WIDTH);
+    // Calculate actual content width (tight fit, not fixed MAX_WIDTH)
+    let maxLineWidth = 0;
+    for (const line of lines) {
+        let lineWidth = 0;
+        for (let li = 0; li < line.length; li++) {
+            if (li > 0) lineWidth += commaWidth;
+            lineWidth += tagWidths[line[li]!]!;
+        }
+        if (lineWidth > maxLineWidth) maxLineWidth = lineWidth;
+    }
+
+    // Image dimensions: tight to content, but VTS requires at least 64x64
+    const textHeight = PADDING_V * 2 + lines.length * lineHeight;
+    const textWidth = Math.ceil(PADDING_H * 2 + maxLineWidth + 2);
+    const totalHeight = Math.max(64, textHeight);
+    const totalWidth = Math.max(64, textWidth);
+
     const canvas = createCanvas(totalWidth, totalHeight);
     const canvasCtx = canvas.getContext("2d");
 
+    // Transparent background, white fill only for the text area
+    canvasCtx.clearRect(0, 0, totalWidth, totalHeight);
     canvasCtx.fillStyle = BG_COLOR;
-    canvasCtx.fillRect(0, 0, totalWidth, totalHeight);
+    canvasCtx.fillRect(0, 0, textWidth, textHeight);
+
     canvasCtx.font = font;
     canvasCtx.textBaseline = "top";
 
-    let y = PADDING;
+    let y = PADDING_V;
     for (const line of lines) {
-        let x = PADDING;
+        let x = PADDING_H;
         for (let li = 0; li < line.length; li++) {
             const tagIdx = line[li]!;
             if (li > 0) {
