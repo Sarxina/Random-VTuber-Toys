@@ -1,6 +1,7 @@
 import type { TwitchChatManager, VTSClient, ClickPinResult } from "@sarxina/sarxina-tools";
 import { ChatCommandManager } from "@sarxina/sarxina-tools";
 import { createCanvas } from "@napi-rs/canvas";
+import sharp from "sharp";
 
 // --- Rendering config (matched to Streamer.bot version) ---
 
@@ -62,7 +63,7 @@ export function startToy(ctx: AO3TaggerContext): ToyHandle {
             return;
         }
 
-        const pngBuffer = renderTagImage(tags);
+        const pngBuffer = await renderTagImage(tags);
         const b64 = pngBuffer.toString("base64");
 
         await unloadCurrentItem();
@@ -127,14 +128,23 @@ export function startToy(ctx: AO3TaggerContext): ToyHandle {
     };
 }
 
-// --- Rendering (matched to Streamer.bot C# version) ---
+// --- Rendering (SVG → sharp for crisp hinted text via Pango/FreeType) ---
 
-function renderTagImage(tagList: string[]): Buffer {
+function escapeXml(s: string): string {
+    return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+}
+
+async function renderTagImage(tagList: string[]): Promise<Buffer> {
     const font = `${FONT_SIZE}px Verdana, sans-serif`;
     const contentWidth = MAX_WIDTH - PADDING_H * 2;
     const lineHeight = Math.floor(FONT_SIZE * LINE_SPACING);
 
-    // Measure tags
+    // Measure with @napi-rs/canvas — only used for layout widths, not rendering.
     const measureCanvas = createCanvas(1, 1);
     const measureCtx = measureCanvas.getContext("2d");
     measureCtx.font = font;
@@ -167,7 +177,6 @@ function renderTagImage(tagList: string[]): Buffer {
         lines.push(currentLine);
     }
 
-    // Calculate actual content width (tight fit, not fixed MAX_WIDTH)
     let maxLineWidth = 0;
     for (const line of lines) {
         let lineWidth = 0;
@@ -178,39 +187,43 @@ function renderTagImage(tagList: string[]): Buffer {
         if (lineWidth > maxLineWidth) maxLineWidth = lineWidth;
     }
 
-    // Image dimensions: tight to content, but VTS requires at least 64x64
     const textHeight = PADDING_V * 2 + lines.length * lineHeight;
     const textWidth = Math.ceil(PADDING_H * 2 + maxLineWidth + 2);
     const totalHeight = Math.max(64, textHeight);
     const totalWidth = Math.max(64, textWidth);
 
-    const canvas = createCanvas(totalWidth, totalHeight);
-    const canvasCtx = canvas.getContext("2d");
-
-    // Transparent background, white fill only for the text area
-    canvasCtx.clearRect(0, 0, totalWidth, totalHeight);
-    canvasCtx.fillStyle = BG_COLOR;
-    canvasCtx.fillRect(0, 0, textWidth, textHeight);
-
-    canvasCtx.font = font;
-    canvasCtx.textBaseline = "top";
-
+    // Build SVG. <text> with text-anchor=start, dominant-baseline=text-before-edge
+    // approximates canvas's textBaseline="top".
+    const tspans: string[] = [];
     let y = PADDING_V;
     for (const line of lines) {
         let x = PADDING_H;
         for (let li = 0; li < line.length; li++) {
             const tagIdx = line[li]!;
             if (li > 0) {
-                canvasCtx.fillStyle = COMMA_COLOR;
-                canvasCtx.fillText(", ", x, y);
+                tspans.push(
+                    `<text x="${x}" y="${y}" fill="${COMMA_COLOR}" font-family="Verdana, sans-serif" font-size="${FONT_SIZE}" dominant-baseline="text-before-edge" xml:space="preserve">, </text>`
+                );
                 x += commaWidth;
             }
-            canvasCtx.fillStyle = TAG_COLOR;
-            canvasCtx.fillText(tagList[tagIdx]!, x, y);
+            tspans.push(
+                `<text x="${x}" y="${y}" fill="${TAG_COLOR}" font-family="Verdana, sans-serif" font-size="${FONT_SIZE}" dominant-baseline="text-before-edge">${escapeXml(tagList[tagIdx]!)}</text>`
+            );
             x += tagWidths[tagIdx]!;
         }
         y += lineHeight;
     }
 
-    return canvas.toBuffer("image/png");
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${totalHeight}" text-rendering="geometricPrecision">
+<rect x="0" y="0" width="${textWidth}" height="${textHeight}" fill="${BG_COLOR}"/>
+${tspans.join("\n")}
+</svg>`;
+
+    // Render at 3x resolution so Pango has more pixels for hinting, then
+    // let sharp's Lanczos3 resizer downsample to target.
+    const SS = 3;
+    return sharp(Buffer.from(svg), { density: 72 * SS })
+        .resize(totalWidth, totalHeight, { kernel: "lanczos3" })
+        .png()
+        .toBuffer();
 }
