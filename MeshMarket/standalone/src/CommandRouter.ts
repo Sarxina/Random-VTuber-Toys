@@ -17,8 +17,8 @@ interface DepsRouter {
     vts: VTSIntegration;
     /** Streamer's login. Used to gate broadcaster-only subcommands. */
     broadcasterLogin: string;
-    /** Game speed for price decay. */
-    speed: GameSpeed;
+    /** Game speed for price decay. Read live so changes via onConfigChange take effect immediately. */
+    getSpeed: () => GameSpeed;
     /** Buyable units derived from the loaded model (or fallback flat list). */
     getUnits: () => readonly MeshUnit[];
     /** Toggle ambient tag display on the model. */
@@ -114,7 +114,7 @@ export class CommandRouter {
         const now = Date.now();
         const summary = owned
             .slice(0, 8)
-            .map((m) => `${m.meshID} (${currentPrice(m.state, now, this.deps.speed)})`)
+            .map((m) => `${m.meshID} (${currentPrice(m.state, now, this.deps.getSpeed())})`)
             .join(", ");
         const suffix = owned.length > 8 ? `, +${owned.length - 8} more` : "";
         await this.say(`@${chatter} You own: ${summary}${suffix}.`);
@@ -154,7 +154,7 @@ export class CommandRouter {
 
         const now = Date.now();
         const meshState = this.deps.wallet.getMesh(unitId);
-        const decayedPrice = currentPrice(meshState, now, this.deps.speed);
+        const decayedPrice = currentPrice(meshState, now, this.deps.getSpeed());
         const isOwner = meshState?.owner === login;
 
         const existingAuction = this.deps.auction.getActive(unitId);

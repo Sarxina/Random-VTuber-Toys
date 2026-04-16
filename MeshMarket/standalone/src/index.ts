@@ -8,6 +8,7 @@ import { CommandRouter } from "./CommandRouter.js";
 import { currentPrice } from "./PriceCalculator.js";
 import { buildFallbackCatalog, loadCatalogFromModel, type MeshUnitCatalog } from "./MeshUnitCatalog.js";
 import type { GameSpeed } from "./types.js";
+import type { ToyControl, ToyControlSchema } from "./controlSchema.js";
 
 export interface MeshMarketContext {
     chat: TwitchChatManager;
@@ -41,11 +42,12 @@ export interface MeshMarketConfig {
 
 export interface ToyHandle {
     stop: () => Promise<void>;
+    onConfigChange?: (config: Record<string, unknown>) => Promise<void>;
 }
 
 export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
     const config = ctx.config ?? {};
-    const speed: GameSpeed = config.speed ?? "medium";
+    let speed: GameSpeed = (config.speed as GameSpeed | undefined) ?? "medium";
 
     const walletPath = `${ctx.dataDir.replace(/\\/g, "/").replace(/\/$/, "")}/mesh-market.json`;
     const wallet = new Wallet(walletPath);
@@ -55,19 +57,14 @@ export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
     const channelPoints = new ChannelPointsManager(ctx.chat, wallet, ctx.chat.say.bind(ctx.chat));
     void channelPoints.init();
 
-    // --- Build the unit catalog ---
-    const catalog = await buildCatalog(ctx, vtsIntegration, config.granularityLevel);
-    if (catalog.granularityLevel !== null) {
-        console.log(
-            `  MeshMarket: ${catalog.units.length} buyable units at granularity level ${catalog.granularityLevel} (covering ${catalog.meshCount} ArtMeshes).`,
-        );
-    } else {
-        console.log(
-            `  MeshMarket: no model directory available — falling back to ${catalog.units.length} individual ArtMeshes.`,
-        );
-    }
+    // Mutable state: catalog + speed both swap live via onConfigChange.
+    let catalog: MeshUnitCatalog = await buildCatalog(
+        ctx,
+        vtsIntegration,
+        (config as MeshMarketConfig).granularityLevel,
+    );
+    logCatalog(catalog);
 
-    // --- Tag visibility ---
     let tagsVisible = config.tagsVisibleOnStart ?? false;
     const renderAllTags = async (): Promise<void> => {
         const now = Date.now();
@@ -90,7 +87,6 @@ export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
     };
     if (tagsVisible) void renderAllTags();
 
-    // --- Auction resolution: settle funds + update unit + refresh that tag ---
     auction.onResolve((result: AuctionResult) => {
         void settleAuction(result);
     });
@@ -141,14 +137,13 @@ export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
         }
     };
 
-    // --- Command router ---
     new CommandRouter({
         chat: ctx.chat,
         wallet,
         auction,
         vts: vtsIntegration,
         broadcasterLogin: ctx.broadcasterLogin,
-        speed,
+        getSpeed: () => speed,
         getUnits: () => catalog.units,
         toggleTags,
         getTagsVisible: () => tagsVisible,
@@ -167,7 +162,99 @@ export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
             await vtsIntegration.unpinAll();
             wallet.flush();
         },
+        onConfigChange: async (next) => {
+            const nextSpeed = (next["speed"] as GameSpeed | undefined) ?? speed;
+            if (nextSpeed !== speed) {
+                speed = nextSpeed;
+                console.log(`  MeshMarket: speed changed to ${speed}`);
+                if (tagsVisible) await renderAllTags();
+            }
+
+            const nextLevel = next["granularityLevel"] as number | undefined;
+            if (
+                ctx.modelDirectory &&
+                typeof nextLevel === "number" &&
+                nextLevel !== catalog.granularityLevel
+            ) {
+                let newCatalog: MeshUnitCatalog;
+                try {
+                    newCatalog = await loadCatalogFromModel(ctx.modelDirectory, nextLevel);
+                } catch (err) {
+                    console.error("  MeshMarket: granularity reload failed:", err);
+                    return;
+                }
+                if (tagsVisible) {
+                    const newIds = new Set(newCatalog.units.map((u) => u.id));
+                    for (const unit of catalog.units) {
+                        if (!newIds.has(unit.id)) {
+                            await vtsIntegration.unpinTag(unit.id);
+                        }
+                    }
+                }
+                catalog = newCatalog;
+                logCatalog(catalog);
+                if (tagsVisible) await renderAllTags();
+            }
+        },
     };
+}
+
+/**
+ * Toy-control schema MeshMarket exposes to the launcher. The granularity
+ * options are computed live from the active model so the streamer can see
+ * how many buyable parts each level produces before picking one.
+ */
+export async function getControlSchema(ctx: MeshMarketContext): Promise<ToyControlSchema> {
+    const controls: ToyControl[] = [
+        {
+            id: "speed",
+            type: "select",
+            label: "Game speed",
+            description: "How quickly mesh prices decay between purchases.",
+            options: [
+                { value: "fast", label: "Fast" },
+                { value: "medium", label: "Medium" },
+                { value: "slow", label: "Slow" },
+            ],
+            default: "medium",
+        },
+    ];
+
+    if (ctx.modelDirectory) {
+        try {
+            const catalog = await loadCatalogFromModel(ctx.modelDirectory);
+            if (catalog.granularityLevels) {
+                controls.push({
+                    id: "granularityLevel",
+                    type: "select",
+                    label: "Mesh granularity",
+                    description:
+                        "Coarser = fewer, broader buyable parts. Finer = more, smaller pieces. Lowering granularity hides parts but keeps existing ownership.",
+                    options: [...catalog.granularityLevels.entries()].map(([level, count]) => ({
+                        value: level,
+                        label: `Level ${level} — ${count} buyable parts`,
+                    })),
+                    default: catalog.granularityLevel ?? 0,
+                });
+            }
+        } catch (err) {
+            console.error("  MeshMarket: schema load failed:", err);
+        }
+    }
+
+    return controls;
+}
+
+function logCatalog(catalog: MeshUnitCatalog): void {
+    if (catalog.granularityLevel !== null) {
+        console.log(
+            `  MeshMarket: ${catalog.units.length} buyable units at granularity level ${catalog.granularityLevel} (covering ${catalog.meshCount} ArtMeshes).`,
+        );
+    } else {
+        console.log(
+            `  MeshMarket: no model directory available — falling back to ${catalog.units.length} individual ArtMeshes.`,
+        );
+    }
 }
 
 async function buildCatalog(
