@@ -9,7 +9,7 @@ export const PRICE_FLOOR = 10;
 // --- Auction ---
 
 export const BID_WINDOW_MS = 60_000;
-/** `!meshbucks buy <mesh>` with no amount defaults to this much over the current ceiling. */
+/** `!meshmarket buy <mesh>` with no amount defaults to this much over the current ceiling. */
 export const DEFAULT_BID_BUMP = 100;
 
 // --- Decay ---

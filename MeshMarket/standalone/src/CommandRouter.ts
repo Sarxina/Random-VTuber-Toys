@@ -31,7 +31,7 @@ export class CommandRouter {
 
     constructor(private deps: DepsRouter) {
         this.say = deps.chat.say.bind(deps.chat);
-        new ChatCommandManager("!meshbucks", (subcommand, chatter) => {
+        new ChatCommandManager("!meshmarket", (subcommand, chatter) => {
             void this.handle(subcommand, chatter);
         }, deps.chat);
     }
@@ -61,11 +61,14 @@ export class CommandRouter {
                 case "mine":
                     await this.cmdMine(chatter, login);
                     return;
-                case "tags":
-                    await this.cmdTags(chatter, login, parts[1] ?? "");
+                case "show":
+                    await this.cmdSetVisible(chatter, login, true);
+                    return;
+                case "hide":
+                    await this.cmdSetVisible(chatter, login, false);
                     return;
                 default:
-                    await this.say(`@${chatter} Unknown: try !meshbucks balance, !meshbucks buy <mesh> [amount], !meshbucks list.`);
+                    await this.say(`@${chatter} Unknown: try !meshmarket balance, !meshmarket buy <mesh> <#>, !meshmarket show/hide.`);
             }
         } catch (err) {
             console.error(`  MeshMarket: error handling "${subcommand}" from ${chatter}:`, err);
@@ -76,7 +79,7 @@ export class CommandRouter {
 
     private async cmdHelp(chatter: string): Promise<void> {
         await this.say(
-            `@${chatter} !meshbucks balance | !meshbucks buy <mesh> [amount] | !meshbucks mine | !meshbucks list`
+            `@${chatter} !meshmarket balance | !meshmarket buy <mesh> <#> | !meshmarket mine | !meshmarket list | !meshmarket show/hide`
         );
     }
 
@@ -96,7 +99,7 @@ export class CommandRouter {
     private async cmdList(chatter: string): Promise<void> {
         const count = this.deps.getMeshes().length;
         await this.say(
-            `@${chatter} ${count} meshes available. Try \`!meshbucks buy <name>\` — if the name doesn't match, I'll suggest the closest ones.`
+            `@${chatter} ${count} meshes available. Try \`!meshmarket buy <name>\` — if the name doesn't match, I'll suggest the closest ones.`
         );
     }
 
@@ -116,27 +119,20 @@ export class CommandRouter {
         await this.say(`@${chatter} You own: ${summary}${suffix}.`);
     }
 
-    private async cmdTags(chatter: string, login: string, arg: string): Promise<void> {
+    private async cmdSetVisible(chatter: string, login: string, visible: boolean): Promise<void> {
         if (login !== this.deps.broadcasterLogin.toLowerCase()) {
-            await this.say(`@${chatter} Only the broadcaster can toggle tags.`);
+            await this.say(`@${chatter} Only the broadcaster can show/hide ownership tags.`);
             return;
         }
-        if (arg === "on") {
-            await this.deps.toggleTags(true);
-            await this.say(`Price tags are now VISIBLE on the model.`);
-        } else if (arg === "off") {
-            await this.deps.toggleTags(false);
-            await this.say(`Price tags are now HIDDEN.`);
-        } else {
-            await this.say(`Use !meshbucks tags on / !meshbucks tags off (currently: ${this.deps.getTagsVisible() ? "on" : "off"})`);
-        }
+        await this.deps.toggleTags(visible);
+        await this.say(visible ? "Ownership tags are now SHOWN on the model." : "Ownership tags are now HIDDEN.");
     }
 
     private async cmdBuy(chatter: string, login: string, args: string[]): Promise<void> {
         const meshArg = args[0];
         const amountArg = args[1];
         if (!meshArg) {
-            await this.say(`@${chatter} Usage: !meshbucks buy <mesh> [amount]`);
+            await this.say(`@${chatter} Usage: !meshmarket buy <mesh> <#>`);
             return;
         }
 
@@ -225,7 +221,7 @@ export class CommandRouter {
         if (!existingAuction) {
             const ownerLabel = meshState?.owner ? `currently owned by ${meshState.owner}` : "unowned";
             await this.say(
-                `@${chatter} is bidding ${bidAmount} MB on ${mesh} (${ownerLabel}). Outbid them with \`!meshbucks buy ${mesh} [amount]\` in the next 60s!`
+                `@${chatter} is bidding ${bidAmount} MB on ${mesh} (${ownerLabel}). Outbid them with \`!meshmarket buy ${mesh} <#>\` in the next 60s!`
             );
         } else {
             await this.say(
