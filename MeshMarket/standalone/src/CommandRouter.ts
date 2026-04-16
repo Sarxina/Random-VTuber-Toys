@@ -3,6 +3,7 @@ import { ChatCommandManager } from "@sarxina/sarxina-tools";
 import type { Wallet } from "./Wallet.js";
 import type { AuctionManager, Bid } from "./Auction.js";
 import type { VTSIntegration } from "./VTSIntegration.js";
+import type { MeshUnit } from "./MeshUnitCatalog.js";
 import { currentPrice } from "./PriceCalculator.js";
 import { DEFAULT_BID_BUMP } from "./config.js";
 import type { GameSpeed } from "./types.js";
@@ -18,8 +19,8 @@ interface DepsRouter {
     broadcasterLogin: string;
     /** Game speed for price decay. */
     speed: GameSpeed;
-    /** Cached list of mesh IDs from VTS. Refresh via the refreshMeshes callback. */
-    getMeshes: () => string[];
+    /** Buyable units derived from the loaded model (or fallback flat list). */
+    getUnits: () => readonly MeshUnit[];
     /** Toggle ambient tag display on the model. */
     toggleTags: (on: boolean) => Promise<void>;
     /** Whether tags are currently visible. */
@@ -79,7 +80,7 @@ export class CommandRouter {
 
     private async cmdHelp(chatter: string): Promise<void> {
         await this.say(
-            `@${chatter} !meshmarket balance | !meshmarket buy <mesh> <#> | !meshmarket mine | !meshmarket list | !meshmarket show/hide`
+            `@${chatter} !meshmarket balance | !meshmarket buy <mesh> <#> | !meshmarket mine | !meshmarket list | !meshmarket show/hide`,
         );
     }
 
@@ -87,19 +88,19 @@ export class CommandRouter {
         const { newEnrollment, balance } = this.deps.wallet.enroll(login);
         if (newEnrollment) {
             await this.say(
-                `@${chatter} You are now enrolled in Mesh Market with ${balance} MeshBucks. ${WELCOME_SUFFIX}`
+                `@${chatter} You are now enrolled in Mesh Market with ${balance} MeshBucks. ${WELCOME_SUFFIX}`,
             );
             return;
         }
         const owned = this.deps.wallet.meshesOwnedBy(login);
-        const ownedStr = owned.length ? ` Owned meshes: ${owned.length}.` : "";
+        const ownedStr = owned.length ? ` Owned: ${owned.length}.` : "";
         await this.say(`@${chatter} Balance: ${balance} MeshBucks.${ownedStr} ${WELCOME_SUFFIX}`);
     }
 
     private async cmdList(chatter: string): Promise<void> {
-        const count = this.deps.getMeshes().length;
+        const count = this.deps.getUnits().length;
         await this.say(
-            `@${chatter} ${count} meshes available. Try \`!meshmarket buy <name>\` — if the name doesn't match, I'll suggest the closest ones.`
+            `@${chatter} ${count} meshes available. Try \`!meshmarket buy <name>\` — if the name doesn't match, I'll suggest the closest ones.`,
         );
     }
 
@@ -136,13 +137,12 @@ export class CommandRouter {
             return;
         }
 
-        // Resolve mesh name: exact (case-insensitive) first, then substring.
-        const mesh = this.resolveMesh(meshArg);
-        if (!mesh) {
-            const candidates = this.suggestMeshes(meshArg, 5);
+        const unitId = this.resolveUnit(meshArg);
+        if (!unitId) {
+            const candidates = this.suggestUnits(meshArg, 5);
             if (candidates.length) {
                 await this.say(
-                    `@${chatter} No mesh "${meshArg}". Close matches: ${candidates.join(", ")}`
+                    `@${chatter} No mesh "${meshArg}". Close matches: ${candidates.join(", ")}`,
                 );
             } else {
                 await this.say(`@${chatter} No mesh "${meshArg}" and no close matches found.`);
@@ -153,16 +153,14 @@ export class CommandRouter {
         this.deps.wallet.enroll(login);
 
         const now = Date.now();
-        const meshState = this.deps.wallet.getMesh(mesh);
+        const meshState = this.deps.wallet.getMesh(unitId);
         const decayedPrice = currentPrice(meshState, now, this.deps.speed);
         const isOwner = meshState?.owner === login;
 
-        // Determine active auction state
-        const existingAuction = this.deps.auction.getActive(mesh);
+        const existingAuction = this.deps.auction.getActive(unitId);
         const highBid = existingAuction?.bids[existingAuction.bids.length - 1] ?? null;
         const ceiling = highBid ? highBid.amount : decayedPrice;
 
-        // Determine bid amount
         let bidAmount: number;
         if (amountArg !== undefined) {
             const parsed = parseInt(amountArg, 10);
@@ -175,7 +173,6 @@ export class CommandRouter {
             bidAmount = ceiling + DEFAULT_BID_BUMP;
         }
 
-        // Validate bid amount
         if (bidAmount <= ceiling) {
             await this.say(`@${chatter} Bid must exceed ${ceiling} MB (current ${highBid ? "high bid" : "price"}).`);
             return;
@@ -185,26 +182,22 @@ export class CommandRouter {
             return;
         }
         if (isOwner && bidAmount <= decayedPrice) {
-            // Owner's "upgrade" must strictly exceed currentPrice.
             await this.say(`@${chatter} As the owner, your bid must exceed the current price of ${decayedPrice} MB.`);
             return;
         }
 
-        // Figure out the actual debit (owner discount)
         const reservedAmount = isOwner ? bidAmount - decayedPrice : bidAmount;
 
-        // Balance check + refund-previous-bid-from-same-user (owner in auction bidding again)
         const priorBid = this.findPriorBidBy(existingAuction?.bids, login);
         const effectiveBalance = this.deps.wallet.balanceOf(login) + (priorBid?.reservedAmount ?? 0);
         if (effectiveBalance < reservedAmount) {
             await this.say(
-                `@${chatter} You need ${reservedAmount} MB to place this bid but have ${this.deps.wallet.balanceOf(login)}.`
+                `@${chatter} You need ${reservedAmount} MB to place this bid but have ${this.deps.wallet.balanceOf(login)}.`,
             );
             return;
         }
 
         if (priorBid) {
-            // Refund their previous bid in this auction before charging the new one.
             this.deps.wallet.credit(login, priorBid.reservedAmount);
         }
         this.deps.wallet.debit(login, reservedAmount);
@@ -215,35 +208,34 @@ export class CommandRouter {
             reservedAmount,
             placedAtMs: now,
         };
-        this.deps.auction.placeBid(mesh, bid);
+        this.deps.auction.placeBid(unitId, bid);
 
-        // Chat notification
         if (!existingAuction) {
             const ownerLabel = meshState?.owner ? `currently owned by ${meshState.owner}` : "unowned";
             await this.say(
-                `@${chatter} is bidding ${bidAmount} MB on ${mesh} (${ownerLabel}). Outbid them with \`!meshmarket buy ${mesh} <#>\` in the next 60s!`
+                `@${chatter} is bidding ${bidAmount} MB on ${unitId} (${ownerLabel}). Outbid them with \`!meshmarket buy ${unitId} <#>\` in the next 60s!`,
             );
         } else {
             await this.say(
-                `@${chatter} raises the bid on ${mesh} to ${bidAmount} MB — 60s reset, outbid now!`
+                `@${chatter} raises the bid on ${unitId} to ${bidAmount} MB — 60s reset, outbid now!`,
             );
         }
     }
 
-    // --- Mesh resolution helpers ---
+    // --- Unit resolution helpers ---
 
-    private resolveMesh(query: string): string | null {
-        const meshes = this.deps.getMeshes();
+    private resolveUnit(query: string): string | null {
         const q = query.toLowerCase();
-        const exact = meshes.find((m) => m.toLowerCase() === q);
-        return exact ?? null;
+        const exact = this.deps.getUnits().find((u) => u.id.toLowerCase() === q);
+        return exact?.id ?? null;
     }
 
-    private suggestMeshes(query: string, limit: number): string[] {
+    private suggestUnits(query: string, limit: number): string[] {
         const q = query.toLowerCase();
         return this.deps
-            .getMeshes()
-            .filter((m) => m.toLowerCase().includes(q))
+            .getUnits()
+            .filter((u) => u.id.toLowerCase().includes(q))
+            .map((u) => u.id)
             .slice(0, limit);
     }
 

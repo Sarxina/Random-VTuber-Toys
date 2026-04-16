@@ -5,13 +5,14 @@ import type { TagRenderer } from "./TagRenderer.js";
  * Thin wrapper around the shared VTSClient for Mesh Market's specific needs:
  * listing artmeshes, pinning tag PNGs to them, and removing tags.
  *
- * Maintains an internal meshID -> itemInstanceID map so we can update a
- * mesh's tag (new price, new owner) by unloading the old item and pinning
- * a fresh one.
+ * Tags are tracked by **unit ID** (a Live2D Part ID, or an ArtMesh ID in
+ * fallback mode). Each tag pins to one anchor ArtMesh chosen by the caller
+ * — we don't care which one as long as the same anchor is used consistently
+ * for that unit, since we update a tag by unloading and re-pinning.
  */
 export class VTSIntegration {
-    private pinned = new Map<string, string>(); // meshID -> itemInstanceID
-    private tagSize = 0.08; // Arbitrary small size; actual display size comes from PNG pixel dims
+    private pinned = new Map<string, string>(); // unitID -> itemInstanceID
+    private tagSize = 0.08;
 
     constructor(
         private vts: VTSClient,
@@ -22,15 +23,20 @@ export class VTSIntegration {
         return this.vts.listArtMeshes();
     }
 
-    /** Render + load + pin a price tag onto a mesh. Replaces existing tag. */
-    async pinTag(meshID: string, ownerLogin: string | null, price: number): Promise<void> {
-        await this.unpinTag(meshID); // Remove any existing tag first
+    /** Render + load + pin a price tag onto a unit, anchored to one of its meshes. */
+    async pinTag(
+        unitID: string,
+        anchorMeshID: string,
+        ownerLogin: string | null,
+        price: number,
+    ): Promise<void> {
+        await this.unpinTag(unitID); // Remove any existing tag first
 
         const png = await this.renderer.render(ownerLogin, price);
         const b64 = png.toString("base64");
 
         const instanceID = await this.vts.loadItem({
-            fileName: `meshmarket_${meshID.replace(/[^a-zA-Z0-9]/g, "_")}.png`,
+            fileName: `meshmarket_${unitID.replace(/[^a-zA-Z0-9]/g, "_")}.png`,
             customDataBase64: b64,
             positionX: 0,
             positionY: 0,
@@ -42,7 +48,7 @@ export class VTSIntegration {
         });
 
         await this.vts.pinItem(instanceID, {
-            artMeshID: meshID,
+            artMeshID: anchorMeshID,
             angle: 0,
             size: this.tagSize,
             angleRelativeTo: "RelativeToModel",
@@ -50,14 +56,14 @@ export class VTSIntegration {
             vertexPinType: "Center",
         });
 
-        this.pinned.set(meshID, instanceID);
+        this.pinned.set(unitID, instanceID);
     }
 
-    /** Remove the tag from a single mesh. */
-    async unpinTag(meshID: string): Promise<void> {
-        const instanceID = this.pinned.get(meshID);
+    /** Remove the tag from a single unit. */
+    async unpinTag(unitID: string): Promise<void> {
+        const instanceID = this.pinned.get(unitID);
         if (!instanceID) return;
-        this.pinned.delete(meshID);
+        this.pinned.delete(unitID);
         try {
             await this.vts.unpinItem(instanceID);
         } catch {
@@ -72,9 +78,9 @@ export class VTSIntegration {
 
     /** Remove every pinned tag. Called on tag toggle-off or toy stop. */
     async unpinAll(): Promise<void> {
-        const meshIDs = Array.from(this.pinned.keys());
-        for (const meshID of meshIDs) {
-            await this.unpinTag(meshID);
+        const unitIDs = Array.from(this.pinned.keys());
+        for (const unitID of unitIDs) {
+            await this.unpinTag(unitID);
         }
     }
 }
