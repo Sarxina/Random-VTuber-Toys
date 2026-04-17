@@ -46,9 +46,13 @@ async function getTagAspect(): Promise<number> {
     return cachedAspect;
 }
 
-/** Strip Live2D rigger conventions and split words so names fit + read better. */
+/**
+ * Strip the `_Folder` suffix but leave underscores intact — the displayed
+ * name stays typeable, so chat can copy what they see on the model into
+ * `!meshmarket buy <name>` without translating spaces back to underscores.
+ */
 function formatUnitName(unitId: string): string {
-    return unitId.replace(/_Folder$/i, "").replace(/_/g, " ").trim();
+    return unitId.replace(/_Folder$/i, "");
 }
 
 /**
