@@ -42,7 +42,7 @@ export class VTSIntegration {
             positionY: 0,
             size: this.tagSize,
             fadeTime: 0.05,
-            order: 50,
+            order: 30,
             customDataAskUserFirst: false,
             customDataSkipAskingUserIfWhitelisted: true,
         });
