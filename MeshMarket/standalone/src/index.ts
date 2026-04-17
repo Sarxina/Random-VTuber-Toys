@@ -32,7 +32,7 @@ export interface MeshMarketContext {
 export interface MeshMarketConfig {
     /** Slider position 0..2 → slow/medium/fast. */
     speedLevel?: number;
-    /** Start with price tags visible on the model. Default false. */
+    /** Start with price tags visible on the model. Default true. */
     tagsVisibleOnStart?: boolean;
     /**
      * Override the granularity level used to build buyable units. When unset,
@@ -72,7 +72,7 @@ export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
     );
     logCatalog(catalog);
 
-    let tagsVisible = config.tagsVisibleOnStart ?? false;
+    let tagsVisible = config.tagsVisibleOnStart ?? true;
     const renderAllTags = async (): Promise<void> => {
         const now = Date.now();
         for (const unit of catalog.units) {
@@ -223,6 +223,13 @@ export async function getControlSchema(ctx: MeshMarketContext): Promise<ToyContr
             step: 1,
             default: 1,
             valueLabels: { 0: "Slow", 1: "Medium", 2: "Fast" },
+        },
+        {
+            id: "tagsVisibleOnStart",
+            type: "toggle",
+            label: "Show price tags on start",
+            description: "Pin price tags to your model when Mesh Market starts. Chat can still toggle with !meshmarket show/hide.",
+            default: true,
         },
     ];
 
