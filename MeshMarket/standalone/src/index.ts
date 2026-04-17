@@ -77,11 +77,16 @@ export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
         const now = Date.now();
         for (const unit of catalog.units) {
             const state = wallet.getMesh(unit.id);
+            // Only render tags for owned units. Unowned units = no tag.
+            if (!state?.owner) {
+                await vtsIntegration.unpinTag(unit.id);
+                continue;
+            }
             const price = currentPrice(state, now, speed);
             const anchor = unit.meshIds[0];
             if (!anchor) continue;
             try {
-                await vtsIntegration.pinTag(unit.id, anchor, state?.owner ?? null, price);
+                await vtsIntegration.pinTag(unit.id, anchor, state.owner, price);
             } catch (err) {
                 console.error(`  MeshMarket: pin failed for ${unit.id}:`, err);
             }
