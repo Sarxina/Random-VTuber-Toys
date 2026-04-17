@@ -30,7 +30,8 @@ export interface MeshMarketContext {
 }
 
 export interface MeshMarketConfig {
-    speed?: GameSpeed;
+    /** Slider position 0..2 → slow/medium/fast. */
+    speedLevel?: number;
     /** Start with price tags visible on the model. Default false. */
     tagsVisibleOnStart?: boolean;
     /**
@@ -40,6 +41,12 @@ export interface MeshMarketConfig {
     granularityLevel?: number;
 }
 
+const SPEED_BY_LEVEL: readonly GameSpeed[] = ["slow", "medium", "fast"];
+function levelToSpeed(level: number | undefined): GameSpeed {
+    if (typeof level !== "number") return "medium";
+    return SPEED_BY_LEVEL[level] ?? "medium";
+}
+
 export interface ToyHandle {
     stop: () => Promise<void>;
     onConfigChange?: (config: Record<string, unknown>) => Promise<void>;
@@ -47,7 +54,7 @@ export interface ToyHandle {
 
 export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
     const config = ctx.config ?? {};
-    let speed: GameSpeed = (config.speed as GameSpeed | undefined) ?? "medium";
+    let speed: GameSpeed = levelToSpeed(config.speedLevel);
 
     const walletPath = `${ctx.dataDir.replace(/\\/g, "/").replace(/\/$/, "")}/mesh-market.json`;
     const wallet = new Wallet(walletPath);
@@ -163,7 +170,7 @@ export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
             wallet.flush();
         },
         onConfigChange: async (next) => {
-            const nextSpeed = (next["speed"] as GameSpeed | undefined) ?? speed;
+            const nextSpeed = levelToSpeed(next["speedLevel"] as number | undefined);
             if (nextSpeed !== speed) {
                 speed = nextSpeed;
                 console.log(`  MeshMarket: speed changed to ${speed}`);
@@ -207,34 +214,40 @@ export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
 export async function getControlSchema(ctx: MeshMarketContext): Promise<ToyControlSchema> {
     const controls: ToyControl[] = [
         {
-            id: "speed",
-            type: "select",
+            id: "speedLevel",
+            type: "slider",
             label: "Game speed",
             description: "How quickly mesh prices decay between purchases.",
-            options: [
-                { value: "fast", label: "Fast" },
-                { value: "medium", label: "Medium" },
-                { value: "slow", label: "Slow" },
-            ],
-            default: "medium",
+            min: 0,
+            max: 2,
+            step: 1,
+            default: 1,
+            valueLabels: { 0: "Slow", 1: "Medium", 2: "Fast" },
         },
     ];
 
     if (ctx.modelDirectory) {
         try {
             const catalog = await loadCatalogFromModel(ctx.modelDirectory);
-            if (catalog.granularityLevels) {
+            if (catalog.granularityLevels && catalog.granularityLevels.size > 0) {
+                const levels = [...catalog.granularityLevels.entries()];
+                const valueLabels: Record<number, string> = {};
+                for (const [level, count] of levels) {
+                    valueLabels[level] = `Level ${level} — ${count} buyable parts`;
+                }
+                const min = Math.min(...levels.map(([lv]) => lv));
+                const max = Math.max(...levels.map(([lv]) => lv));
                 controls.push({
                     id: "granularityLevel",
-                    type: "select",
+                    type: "slider",
                     label: "Mesh granularity",
                     description:
                         "Coarser = fewer, broader buyable parts. Finer = more, smaller pieces. Lowering granularity hides parts but keeps existing ownership.",
-                    options: [...catalog.granularityLevels.entries()].map(([level, count]) => ({
-                        value: level,
-                        label: `Level ${level} — ${count} buyable parts`,
-                    })),
-                    default: catalog.granularityLevel ?? 0,
+                    min,
+                    max,
+                    step: 1,
+                    default: catalog.granularityLevel ?? min,
+                    valueLabels,
                 });
             }
         } catch (err) {

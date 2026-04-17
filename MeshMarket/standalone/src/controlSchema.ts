@@ -16,6 +16,8 @@ export interface SliderControl extends ControlBase {
     readonly max: number;
     readonly step?: number;
     readonly default: number;
+    /** Optional per-stop labels — slider's value display uses these when present. */
+    readonly valueLabels?: Readonly<Record<number, string>>;
 }
 
 export interface SelectControl extends ControlBase {
