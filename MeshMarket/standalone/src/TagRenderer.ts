@@ -6,27 +6,23 @@ import { measureText, renderTextImage } from "@sarxina/sarxina-tools";
 
 /**
  * Price tag — text composited onto the vendored `assets/price-tag.png`.
- * Two rows: owner name on top, "PRICE MB" on bottom.
+ * Three rows: unit/part name on top, owner in the middle, price on bottom.
  *
  * The body of the tag (everything to the right of the hole) is the safe
  * region for text. Body coordinates are expressed as fractions of the
  * tag image so they survive any future asset swap or resize.
- *
- * This class only produces PNG buffers. Pinning to a mesh is VTSIntegration's
- * job.
  */
 
-const TAG_WIDTH = 360; // ~3x previous tag width
+const TAG_WIDTH = 360;
 const FONT_FAMILY = "Arial, sans-serif";
 const TEXT_COLOR = "#111111";
-const PRICE_COLOR = "#006b2a"; // green — feels market-y
+const OWNER_COLOR = "#444444";
+const PRICE_COLOR = "#006b2a";
 
-// Body region of the tag image (fractions of width/height).
-// Tag has the hole on the left ~25% of the width; the body fills the rest.
 const BODY_LEFT_FRAC = 0.32;
 const BODY_RIGHT_FRAC = 0.96;
-const BODY_TOP_FRAC = 0.18;
-const BODY_BOTTOM_FRAC = 0.82;
+const BODY_TOP_FRAC = 0.14;
+const BODY_BOTTOM_FRAC = 0.86;
 
 const TAG_PATH = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -50,8 +46,36 @@ async function getTagAspect(): Promise<number> {
     return cachedAspect;
 }
 
+/** Strip Live2D rigger conventions and split words so names fit + read better. */
+function formatUnitName(unitId: string): string {
+    return unitId.replace(/_Folder$/i, "").replace(/_/g, " ").trim();
+}
+
+/**
+ * Fit text within maxWidth: shrink the font first, then truncate with an
+ * ellipsis if even the smallest font overflows. Returns the possibly-truncated
+ * text alongside the font size that fits.
+ */
+function fitLine(
+    text: string,
+    maxWidth: number,
+    maxFontSize: number,
+    minFontSize: number,
+    family: string,
+): { text: string; fontSize: number } {
+    for (let size = maxFontSize; size >= minFontSize; size--) {
+        if (measureText(text, size, family) <= maxWidth) return { text, fontSize: size };
+    }
+    let truncated = text;
+    while (truncated.length > 1 && measureText(truncated + "…", minFontSize, family) > maxWidth) {
+        truncated = truncated.slice(0, -1);
+    }
+    return { text: truncated + "…", fontSize: minFontSize };
+}
+
 export class TagRenderer {
-    async render(ownerLogin: string | null, price: number): Promise<Buffer> {
+    async render(unitId: string, ownerLogin: string | null, price: number): Promise<Buffer> {
+        const nameText = formatUnitName(unitId);
         const ownerText = ownerLogin ?? "—";
         const priceText = `${price} MB`;
 
@@ -66,22 +90,30 @@ export class TagRenderer {
         const bodyW = bodyR - bodyL;
         const bodyH = bodyB - bodyT;
 
-        // Pick text sizes that fit the body. Price is the louder one.
-        const ownerFontSize = Math.round(bodyH * 0.30);
-        const priceFontSize = Math.round(bodyH * 0.45);
-        const rowGap = Math.round(bodyH * 0.05);
+        // Base font sizes as fractions of body height. Unit name auto-shrinks
+        // to fit width (long part IDs shouldn't explode the layout).
+        const nameMaxFont = Math.round(bodyH * 0.24);
+        const ownerFont = Math.round(bodyH * 0.20);
+        const priceFont = Math.round(bodyH * 0.32);
+        const rowGap = Math.round(bodyH * 0.03);
 
-        // Centre each row horizontally within the body.
-        const ownerW = measureText(ownerText, ownerFontSize, FONT_FAMILY);
-        const priceW = measureText(priceText, priceFontSize, FONT_FAMILY);
+        const fittedName = fitLine(nameText, bodyW, nameMaxFont, Math.round(nameMaxFont * 0.5), FONT_FAMILY);
+        const displayName = fittedName.text;
+        const nameFont = fittedName.fontSize;
+
+        const nameW = measureText(displayName, nameFont, FONT_FAMILY);
+        const ownerW = measureText(ownerText, ownerFont, FONT_FAMILY);
+        const priceW = measureText(priceText, priceFont, FONT_FAMILY);
+
+        const nameX = bodyL + (bodyW - nameW) / 2;
         const ownerX = bodyL + (bodyW - ownerW) / 2;
         const priceX = bodyL + (bodyW - priceW) / 2;
 
-        // Stack vertically, centred on the body.
-        const blockH = ownerFontSize + rowGap + priceFontSize;
+        const blockH = nameFont + rowGap + ownerFont + rowGap + priceFont;
         const startY = bodyT + (bodyH - blockH) / 2;
-        const ownerY = startY;
-        const priceY = startY + ownerFontSize + rowGap;
+        const nameY = startY;
+        const ownerY = nameY + nameFont + rowGap;
+        const priceY = ownerY + ownerFont + rowGap;
 
         const textOverlay = await renderTextImage({
             width: tagW,
@@ -89,20 +121,9 @@ export class TagRenderer {
             backgroundColor: "transparent",
             fontFamily: FONT_FAMILY,
             elements: [
-                {
-                    text: ownerText,
-                    x: ownerX,
-                    y: ownerY,
-                    fontSize: ownerFontSize,
-                    color: TEXT_COLOR,
-                },
-                {
-                    text: priceText,
-                    x: priceX,
-                    y: priceY,
-                    fontSize: priceFontSize,
-                    color: PRICE_COLOR,
-                },
+                { text: displayName, x: nameX, y: nameY, fontSize: nameFont, color: TEXT_COLOR },
+                { text: ownerText, x: ownerX, y: ownerY, fontSize: ownerFont, color: OWNER_COLOR },
+                { text: priceText, x: priceX, y: priceY, fontSize: priceFont, color: PRICE_COLOR },
             ],
         });
 
