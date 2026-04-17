@@ -1,5 +1,17 @@
+import { createHash } from "node:crypto";
 import type { VTSClient } from "@sarxina/sarxina-tools";
 import type { TagRenderer } from "./TagRenderer.js";
+
+/**
+ * Build a VTS-acceptable filename for a tag image. VTS rejects custom-data
+ * filenames that aren't `[a-zA-Z0-9-]+\.(png|jpg)` of length 8-32. Unit IDs
+ * include underscores and can be far too long, so hash to a stable 16-char
+ * hex string and wrap with a fixed prefix/suffix (length 23 total).
+ */
+function tagFilename(unitID: string): string {
+    const hash = createHash("sha1").update(unitID).digest("hex").slice(0, 16);
+    return `mm-${hash}.png`;
+}
 
 /**
  * Thin wrapper around the shared VTSClient for Mesh Market's specific needs:
@@ -36,7 +48,7 @@ export class VTSIntegration {
         const b64 = png.toString("base64");
 
         const instanceID = await this.vts.loadItem({
-            fileName: `meshmarket_${unitID.replace(/[^a-zA-Z0-9]/g, "_")}.png`,
+            fileName: tagFilename(unitID),
             customDataBase64: b64,
             positionX: 0,
             positionY: 0,
