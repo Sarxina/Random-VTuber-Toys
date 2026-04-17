@@ -135,18 +135,11 @@ export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
             );
         }
 
-        if (tagsVisible) {
-            const unit = catalog.findUnit(unitID);
-            const anchor = unit?.meshIds[0];
-            if (anchor) {
-                const price = currentPrice(wallet.getMesh(unitID), now, speed);
-                try {
-                    await vtsIntegration.pinTag(unitID, anchor, winner.bidder, price);
-                } catch (err) {
-                    console.error(`  MeshMarket: tag refresh failed for ${unitID}:`, err);
-                }
-            }
-        }
+        // Any game-state change re-renders every visible tag, react-style.
+        // Only the winning unit's price actually shifted, but re-rendering
+        // all of them keeps the "displayed = canonical" invariant simple and
+        // avoids a background ticker for decay refreshes.
+        if (tagsVisible) await renderAllTags();
     };
 
     new CommandRouter({
