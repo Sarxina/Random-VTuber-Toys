@@ -12,7 +12,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "assets"
   ],
   "publishConfig": {
     "access": "public"
@@ -23,7 +24,8 @@
   },
   "dependencies": {
     "@sarxina/sarxina-tools": "^0.2.2",
-    "dotenv": "^16.4.0"
+    "dotenv": "^16.4.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
