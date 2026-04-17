@@ -44,7 +44,7 @@ export class VTSIntegration {
     ): Promise<void> {
         await this.unpinTag(unitID); // Remove any existing tag first
 
-        const png = await this.renderer.render(ownerLogin, price);
+        const png = await this.renderer.render(unitID, ownerLogin, price);
         const b64 = png.toString("base64");
 
         const instanceID = await this.vts.loadItem({
