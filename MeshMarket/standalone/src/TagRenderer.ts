@@ -46,9 +46,13 @@ async function getTagAspect(): Promise<number> {
     return cachedAspect;
 }
 
-/** Strip Live2D rigger conventions and split words so names fit + read better. */
+/**
+ * Display the raw unit ID verbatim. The tag is an auction label — chat
+ * needs to see the exact name they'd type into `!meshmarket buy <name>`.
+ * Truncation (if needed) is handled downstream by the fit-line logic.
+ */
 function formatUnitName(unitId: string): string {
-    return unitId.replace(/_Folder$/i, "").replace(/_/g, " ").trim();
+    return unitId;
 }
 
 /**
@@ -93,7 +97,7 @@ export class TagRenderer {
         // Base font sizes as fractions of body height. Unit name auto-shrinks
         // to fit width (long part IDs shouldn't explode the layout).
         const nameMaxFont = Math.round(bodyH * 0.24);
-        const ownerFont = Math.round(bodyH * 0.20);
+        const ownerFont = Math.round(bodyH * 0.26);
         const priceFont = Math.round(bodyH * 0.32);
         const rowGap = Math.round(bodyH * 0.03);
 
