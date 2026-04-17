@@ -24,7 +24,7 @@ function tagFilename(unitID: string): string {
  */
 export class VTSIntegration {
     private pinned = new Map<string, string>(); // unitID -> itemInstanceID
-    private tagSize = 0.6;
+    private tagSize = 0.3;
 
     constructor(
         private vts: VTSClient,
