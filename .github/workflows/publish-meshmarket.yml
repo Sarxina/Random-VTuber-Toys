@@ -1,63 +1,26 @@
 name: Publish MeshMarket
 
+# Triggers on push to main when MeshMarket/standalone changes. Reads
+# MeshMarket/standalone/package.json's version, runs tests + build +
+# npm publish, creates and pushes the meshmarket-v<version> tag.
+#
+# Per-toy tag prefix (`meshmarket-v` rather than the default `v`) keeps
+# each toy's tag namespace independent.
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - "MeshMarket/standalone/**"
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
+  release:
+    uses: Sarxina/sarxina-tools/.github/workflows/release.yml@main
     permissions:
       contents: write
       id-token: write
-    defaults:
-      run:
-        working-directory: MeshMarket/standalone
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        working-directory: .
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build
-        run: npm run build
-
-      - name: Bump patch version
-        run: |
-          npm version patch --no-git-tag-version
-          NEW_VERSION=$(node -p "require('./package.json').version")
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-
-      - name: Commit version bump
-        run: |
-          git add MeshMarket/standalone/package.json MeshMarket/standalone/package-lock.json || true
-          git commit -m "chore: release @sarxina/meshmarket@${{ env.NEW_VERSION }} [skip ci]"
-          git tag "meshmarket-v${{ env.NEW_VERSION }}"
-          git pull --rebase origin main || true
-          git push
-          git push --tags
-        working-directory: .
-
-      - name: Publish to npm
-        run: npm publish --access public --provenance
-        env:
-          NPM_CONFIG_PROVENANCE: "true"
+    with:
+      working_directory: MeshMarket/standalone
+      tag_prefix: meshmarket-v
+      npm_publish: true
+      run_tests: false   # MeshMarket has no test suite yet
+    secrets: inherit
