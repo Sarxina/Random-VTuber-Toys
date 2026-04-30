@@ -1,4 +1,8 @@
-import { RedeemCommandManager, type TwitchChatManager } from "@sarxina/sarxina-tools";
+import type {
+    ActionRegistry,
+    TwitchRewardTriggerInput,
+} from "@sarxina/sarxina-tools";
+import { Action } from "@sarxina/sarxina-tools";
 import { REWARD_TITLES } from "./config.js";
 import type { Wallet } from "./Wallet.js";
 
@@ -8,19 +12,24 @@ interface HelixReward {
     cost: number;
 }
 
+const ACTION_NAME_PREFIX = "meshmarket-reward-";
+
 /**
  * On startup:
  *   1. Check which of our three rewards already exist on the channel (Helix API).
  *   2. Create any that are missing.
- *   3. Subscribe via RedeemCommandManager to credit the user on each redemption.
+ *   3. Register one Action per reward title with the shared ActionRegistry.
+ *      The Action filters on `rewardTitle` so it only fires for that reward.
  *
  * Fails gracefully if the broadcaster isn't affiliate (no channel points) or
  * the required scope is missing — logs a warning and skips setup. The toy
  * still works for buying/selling; users just can't top up via channel points.
  */
 export class ChannelPointsManager {
+    private registeredActionNames: string[] = [];
+
     constructor(
-        private chat: TwitchChatManager,
+        private actionRegistry: ActionRegistry,
         private wallet: Wallet,
         private say: (msg: string) => Promise<void>
     ) {}
@@ -42,14 +51,32 @@ export class ChannelPointsManager {
             }
         }
 
-        // Subscribe regardless — if the streamer created rewards manually we still handle them.
+        // Register an Action per reward title — the registry routes events
+        // matching `rewardTitle == <title>` to that Action's handler.
         for (const [title, bucks] of Object.entries(REWARD_TITLES)) {
-            new RedeemCommandManager(
-                title,
-                (chatter) => this.onRedeem(chatter, bucks),
-                this.chat
+            const actionName = `${ACTION_NAME_PREFIX}${title}`;
+            const action = new Action(
+                actionName,
+                [{
+                    source: { platform: "twitch", kind: "reward" },
+                    filters: [{ field: "rewardTitle", op: "equals", value: title }],
+                }],
+                [(firing) => {
+                    const { user } = firing.input as TwitchRewardTriggerInput;
+                    this.onRedeem(user, bucks);
+                }],
             );
+            this.actionRegistry.register(action);
+            this.registeredActionNames.push(actionName);
         }
+    }
+
+    /** Remove every registered reward Action from the shared registry. */
+    dispose(): void {
+        for (const name of this.registeredActionNames) {
+            this.actionRegistry.unregister(name);
+        }
+        this.registeredActionNames = [];
     }
 
     private onRedeem(chatter: string, bucks: number): void {

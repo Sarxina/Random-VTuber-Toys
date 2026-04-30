@@ -1,5 +1,9 @@
-import type { TwitchChatManager } from "@sarxina/sarxina-tools";
-import { ChatCommandManager } from "@sarxina/sarxina-tools";
+import type {
+    ActionRegistry,
+    TwitchChatTriggerInput,
+    TwitchManager,
+} from "@sarxina/sarxina-tools";
+import { Action } from "@sarxina/sarxina-tools";
 import type { Wallet } from "./Wallet.js";
 import type { AuctionManager, Bid } from "./Auction.js";
 import type { VTSIntegration } from "./VTSIntegration.js";
@@ -9,9 +13,12 @@ import { DEFAULT_BID_BUMP } from "./config.js";
 import type { GameSpeed } from "./types.js";
 
 const WELCOME_SUFFIX = "Get more MeshBucks with channel point rewards.";
+const TRIGGER = "!meshmarket";
+const ACTION_NAME = "meshmarket-chat-router";
 
 interface DepsRouter {
-    chat: TwitchChatManager;
+    chat: TwitchManager;
+    actionRegistry: ActionRegistry;
     wallet: Wallet;
     auction: AuctionManager;
     vts: VTSIntegration;
@@ -32,9 +39,29 @@ export class CommandRouter {
 
     constructor(private deps: DepsRouter) {
         this.say = deps.chat.say.bind(deps.chat);
-        new ChatCommandManager("!meshmarket", (subcommand, chatter) => {
-            void this.handle(subcommand, chatter);
-        }, deps.chat);
+
+        // Register one Action that fires on any chat message starting with
+        // `!meshmarket` as a whole word; the handler peels off the verb and
+        // dispatches internally.
+        const action = new Action(
+            ACTION_NAME,
+            [{
+                source: { platform: "twitch", kind: "chat" },
+                filters: [{ field: "message", op: "startsWithWord", value: TRIGGER }],
+            }],
+            [(firing) => {
+                const { message, user } = firing.input as TwitchChatTriggerInput;
+                const spaceIdx = message.indexOf(" ");
+                const subcommand = spaceIdx === -1 ? "" : message.slice(spaceIdx + 1);
+                void this.handle(subcommand, user);
+            }],
+        );
+        deps.actionRegistry.register(action);
+    }
+
+    /** Remove the chat-trigger Action from the shared registry. */
+    dispose(): void {
+        this.deps.actionRegistry.unregister(ACTION_NAME);
     }
 
     private async handle(subcommand: string, chatter: string): Promise<void> {
