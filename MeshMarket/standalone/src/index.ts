@@ -1,4 +1,4 @@
-import type { TwitchChatManager, VTSClient } from "@sarxina/sarxina-tools";
+import type { ActionRegistry, TwitchManager, VTSClient } from "@sarxina/sarxina-tools";
 import { Wallet } from "./Wallet.js";
 import { AuctionManager, type AuctionResult } from "./Auction.js";
 import { TagRenderer } from "./TagRenderer.js";
@@ -11,7 +11,8 @@ import type { GameSpeed } from "./types.js";
 import type { ToyControl, ToyControlSchema } from "./controlSchema.js";
 
 export interface MeshMarketContext {
-    chat: TwitchChatManager;
+    chat: TwitchManager;
+    actionRegistry: ActionRegistry;
     vts: VTSClient;
     /** Data directory for the wallet JSON file. The launcher supplies its
      *  own userData path so state persists across sessions. */
@@ -61,7 +62,11 @@ export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
     const auction = new AuctionManager();
     const renderer = new TagRenderer();
     const vtsIntegration = new VTSIntegration(ctx.vts, renderer);
-    const channelPoints = new ChannelPointsManager(ctx.chat, wallet, ctx.chat.say.bind(ctx.chat));
+    const channelPoints = new ChannelPointsManager(
+        ctx.actionRegistry,
+        wallet,
+        ctx.chat.say.bind(ctx.chat),
+    );
     void channelPoints.init();
 
     // Mutable state: catalog + speed both swap live via onConfigChange.
@@ -142,8 +147,9 @@ export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
         if (tagsVisible) await renderAllTags();
     };
 
-    new CommandRouter({
+    const commandRouter = new CommandRouter({
         chat: ctx.chat,
+        actionRegistry: ctx.actionRegistry,
         wallet,
         auction,
         vts: vtsIntegration,
@@ -158,6 +164,8 @@ export async function startToy(ctx: MeshMarketContext): Promise<ToyHandle> {
 
     return {
         stop: async () => {
+            commandRouter.dispose();
+            channelPoints.dispose();
             const open = auction.closeAll();
             for (const result of open) {
                 for (const bid of [...result.losers, result.winner]) {

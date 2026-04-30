@@ -1,6 +1,6 @@
 {
   "name": "@sarxina/meshmarket",
-  "version": "0.1.18",
+  "version": "0.2.0",
   "description": "A VTube Studio plugin that lets Twitch chat buy and sell parts of your model",
   "type": "module",
   "main": "./dist/index.js",
@@ -23,7 +23,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@sarxina/sarxina-tools": "^0.2.2",
+    "@sarxina/sarxina-tools": "^0.3.2",
     "dotenv": "^16.4.0",
     "sharp": "^0.34.5"
   },
