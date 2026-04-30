@@ -1,0 +1,14 @@
+name: PR — GetDown
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, labeled, unlabeled]
+    paths:
+      - "GetDown/standalone/**"
+
+jobs:
+  pr-checks:
+    uses: Sarxina/sarxina-tools/.github/workflows/pr-checks.yml@main
+    with:
+      package_json_dir: GetDown/standalone

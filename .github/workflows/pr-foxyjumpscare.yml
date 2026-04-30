@@ -1,0 +1,14 @@
+name: PR — FoxyJumpscare
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, labeled, unlabeled]
+    paths:
+      - "FoxyJumpscare/standalone/**"
+
+jobs:
+  pr-checks:
+    uses: Sarxina/sarxina-tools/.github/workflows/pr-checks.yml@main
+    with:
+      package_json_dir: FoxyJumpscare/standalone
