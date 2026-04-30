@@ -1,5 +1,11 @@
-import type { TwitchChatManager, VTSClient, ClickPinResult } from "@sarxina/sarxina-tools";
-import { ChatCommandManager } from "@sarxina/sarxina-tools";
+import type {
+    ActionRegistry,
+    ClickPinResult,
+    TwitchChatTriggerInput,
+    TwitchManager,
+    VTSClient,
+} from "@sarxina/sarxina-tools";
+import { Action } from "@sarxina/sarxina-tools";
 import { createCanvas } from "@napi-rs/canvas";
 import sharp from "sharp";
 
@@ -18,7 +24,8 @@ const BG_COLOR = "rgb(255, 255, 255)";
 // --- Public types ---
 
 export interface AO3TaggerContext {
-    chat: TwitchChatManager;
+    chat: TwitchManager;
+    actionRegistry: ActionRegistry;
     vts: VTSClient;
     /** Exact pin coordinates from a user click. If provided, tags are pinned
      *  to this exact spot. If not, tags are loaded without pinning. */
@@ -111,18 +118,31 @@ export function startToy(ctx: AO3TaggerContext): ToyHandle {
         await displayTags();
     };
 
-    new ChatCommandManager(
-        triggerCommand,
-        (subcommand, _chatter) => {
+    // Register an Action with the shared ActionRegistry. The startsWithWord
+    // filter ensures only messages that begin with the trigger as a complete
+    // token match (so `!ao3taggerextra` won't trigger when the keyword is
+    // `!ao3tag`). The handler strips the keyword and forwards the rest.
+    const actionName = `ao3tagger-${triggerCommand}`;
+    const action = new Action(
+        actionName,
+        [{
+            source: { platform: "twitch", kind: "chat" },
+            filters: [{ field: "message", op: "startsWithWord", value: triggerCommand }],
+        }],
+        [(firing) => {
+            const { message } = firing.input as TwitchChatTriggerInput;
+            const spaceIdx = message.indexOf(" ");
+            const subcommand = spaceIdx === -1 ? "" : message.slice(spaceIdx + 1);
             void handleSubcommand(subcommand);
-        },
-        ctx.chat
+        }],
     );
+    ctx.actionRegistry.register(action);
 
     console.log(`  AO3Tagger running — listening for "${triggerCommand}" in Twitch chat`);
 
     return {
         stop: async () => {
+            ctx.actionRegistry.unregister(actionName);
             await unloadCurrentItem();
         },
     };

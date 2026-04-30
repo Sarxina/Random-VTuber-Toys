@@ -1,6 +1,6 @@
 {
   "name": "@sarxina/ao3tagger",
-  "version": "0.1.10",
+  "version": "0.2.0",
   "description": "A VTube Studio plugin that displays AO3-style tags as an overlay on your model",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.56",
-    "@sarxina/sarxina-tools": "^0.1.6",
+    "@sarxina/sarxina-tools": "^0.3.2",
     "dotenv": "^16.4.0",
     "sharp": "^0.34.5"
   },
