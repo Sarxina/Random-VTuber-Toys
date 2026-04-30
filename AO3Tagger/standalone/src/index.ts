@@ -19,8 +19,7 @@ export type AO3TaggerTriggerType = "chat" | "reward";
 export interface AO3TaggerControl {
     readonly id: string;
     readonly label: string;
-    readonly type: "select" | "textInput" | "numberInput";
-    readonly description?: string;
+    readonly type: "radio" | "textInput" | "numberInput";
     readonly default: string | number;
     readonly options?: ReadonlyArray<{ readonly value: string; readonly label: string }>;
     readonly min?: number;
@@ -32,20 +31,18 @@ export function getControlSchema(): readonly AO3TaggerControl[] {
     return [
         {
             id: "triggerType",
-            type: "select",
-            label: "How chat triggers tags",
-            description: "Use a chat command, or have viewers spend channel points instead.",
+            type: "radio",
+            label: "Trigger Type",
             default: "chat",
             options: [
-                { value: "chat", label: "Chat command" },
-                { value: "reward", label: "Channel point redeem" },
+                { value: "chat", label: "Chat Command" },
+                { value: "reward", label: "Channel Points" },
             ],
         },
         {
             id: "triggerCommand",
             type: "textInput",
-            label: "Chat command",
-            description: "The chat keyword that adds/clears tags. Whatever follows the keyword becomes the tag.",
+            label: "Command String",
             default: "!ao3tag",
             placeholder: "!ao3tag",
             showWhen: { id: "triggerType", equals: "chat" },
@@ -53,8 +50,7 @@ export function getControlSchema(): readonly AO3TaggerControl[] {
         {
             id: "rewardTitle",
             type: "textInput",
-            label: "Channel point reward title",
-            description: "Exact title of the channel point reward. Created automatically if it doesn't exist.",
+            label: "Reward Title",
             default: "AO3 Tag",
             placeholder: "AO3 Tag",
             showWhen: { id: "triggerType", equals: "reward" },
@@ -62,8 +58,7 @@ export function getControlSchema(): readonly AO3TaggerControl[] {
         {
             id: "rewardCost",
             type: "numberInput",
-            label: "Reward cost (channel points)",
-            description: "How many channel points the reward costs. Used only when creating the reward — manual edits in Twitch's dashboard are preserved.",
+            label: "Reward Cost",
             default: 500,
             min: 1,
             showWhen: { id: "triggerType", equals: "reward" },
