@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { TwitchChatManager, VTSClient } from "@sarxina/sarxina-tools";
+import { ActionRegistry, TwitchManager, VTSClient } from "@sarxina/sarxina-tools";
 import { startToy } from "./index.js";
 
 const VTS_URL = process.env["VTS_URL"] ?? "ws://localhost:8001";
@@ -12,9 +12,10 @@ const vts = await VTSClient.connect({
 });
 console.log("  Authenticated with VTube Studio.");
 
-const chat = new TwitchChatManager();
+const chat = new TwitchManager();
+const actionRegistry = new ActionRegistry([chat]);
 
-const handle = startToy({ chat, vts });
+const handle = startToy({ chat, actionRegistry, vts });
 
 process.on("SIGINT", async () => {
     console.log("\n  Stopping...");
