@@ -3,11 +3,73 @@ import type {
     ClickPinResult,
     TwitchChatTriggerInput,
     TwitchManager,
+    TwitchRewardTriggerInput,
     VTSClient,
 } from "@sarxina/sarxina-tools";
 import { Action } from "@sarxina/sarxina-tools";
 import { createCanvas } from "@napi-rs/canvas";
 import sharp from "sharp";
+
+// --- Toy-control schema for the plugin-manager UI. Defined inline here as
+// the simplest path; mirrors plugin-manager's `electron/toyControls.ts`.
+// ---
+
+export type AO3TaggerTriggerType = "chat" | "reward";
+
+export interface AO3TaggerControl {
+    readonly id: string;
+    readonly label: string;
+    readonly type: "select" | "textInput" | "numberInput";
+    readonly description?: string;
+    readonly default: string | number;
+    readonly options?: ReadonlyArray<{ readonly value: string; readonly label: string }>;
+    readonly min?: number;
+    readonly placeholder?: string;
+    readonly showWhen?: { readonly id: string; readonly equals: string | number | boolean };
+}
+
+export function getControlSchema(): readonly AO3TaggerControl[] {
+    return [
+        {
+            id: "triggerType",
+            type: "select",
+            label: "How chat triggers tags",
+            description: "Use a chat command, or have viewers spend channel points instead.",
+            default: "chat",
+            options: [
+                { value: "chat", label: "Chat command" },
+                { value: "reward", label: "Channel point redeem" },
+            ],
+        },
+        {
+            id: "triggerCommand",
+            type: "textInput",
+            label: "Chat command",
+            description: "The chat keyword that adds/clears tags. Whatever follows the keyword becomes the tag.",
+            default: "!ao3tag",
+            placeholder: "!ao3tag",
+            showWhen: { id: "triggerType", equals: "chat" },
+        },
+        {
+            id: "rewardTitle",
+            type: "textInput",
+            label: "Channel point reward title",
+            description: "Exact title of the channel point reward. Created automatically if it doesn't exist.",
+            default: "AO3 Tag",
+            placeholder: "AO3 Tag",
+            showWhen: { id: "triggerType", equals: "reward" },
+        },
+        {
+            id: "rewardCost",
+            type: "numberInput",
+            label: "Reward cost (channel points)",
+            description: "How many channel points the reward costs. Used only when creating the reward — manual edits in Twitch's dashboard are preserved.",
+            default: 500,
+            min: 1,
+            showWhen: { id: "triggerType", equals: "reward" },
+        },
+    ];
+}
 
 // --- Rendering config (matched to Streamer.bot version) ---
 
@@ -34,8 +96,14 @@ export interface AO3TaggerContext {
 }
 
 export interface AO3TaggerConfig {
-    /** Chat command that adds/clears tags. Default "!ao3tag". */
+    /** Chat command vs. channel point redeem. Default "chat". */
+    triggerType?: AO3TaggerTriggerType;
+    /** Chat command that adds/clears tags. Used when triggerType is "chat". Default "!ao3tag". */
     triggerCommand?: string;
+    /** Title of the channel point reward. Used when triggerType is "reward". Default "AO3 Tag". */
+    rewardTitle?: string;
+    /** Cost of the reward in channel points. Used when triggerType is "reward" and the reward needs to be created. Default 500. */
+    rewardCost?: number;
     /** Size of the tag overlay in VTS (0-1). Default 0.42. */
     itemSize?: number;
 }
@@ -48,7 +116,10 @@ export interface ToyHandle {
 
 export function startToy(ctx: AO3TaggerContext): ToyHandle {
     const config = ctx.config ?? {};
+    const triggerType: AO3TaggerTriggerType = config.triggerType ?? "chat";
     const triggerCommand = config.triggerCommand ?? "!ao3tag";
+    const rewardTitle = config.rewardTitle ?? "AO3 Tag";
+    const rewardCost = config.rewardCost ?? 500;
     const itemSize = config.itemSize ?? 0.42;
 
     const tags: string[] = [];
@@ -118,27 +189,49 @@ export function startToy(ctx: AO3TaggerContext): ToyHandle {
         await displayTags();
     };
 
-    // Register an Action with the shared ActionRegistry. The startsWithWord
-    // filter ensures only messages that begin with the trigger as a complete
-    // token match (so `!ao3taggerextra` won't trigger when the keyword is
-    // `!ao3tag`). The handler strips the keyword and forwards the rest.
-    const actionName = `ao3tagger-${triggerCommand}`;
-    const action = new Action(
-        actionName,
-        [{
-            source: { platform: "twitch", kind: "chat" },
-            filters: [{ field: "message", op: "startsWithWord", value: triggerCommand }],
-        }],
-        [(firing) => {
-            const { message } = firing.input as TwitchChatTriggerInput;
-            const spaceIdx = message.indexOf(" ");
-            const subcommand = spaceIdx === -1 ? "" : message.slice(spaceIdx + 1);
-            void handleSubcommand(subcommand);
-        }],
-    );
+    // Branch on triggerType. The handler is the same end-state — feed the
+    // user's input into handleSubcommand — but the source/filter and how the
+    // input is extracted differ between chat and reward.
+    let actionName: string;
+    let action: Action;
+    if (triggerType === "reward") {
+        actionName = `ao3tagger-reward-${rewardTitle}`;
+        action = new Action(
+            actionName,
+            [{
+                source: { platform: "twitch", kind: "reward" },
+                filters: [{ field: "rewardTitle", op: "equals", value: rewardTitle }],
+            }],
+            // For redeems, the user's input IS the reward's `input` field —
+            // no prefix to strip.
+            [(firing) => {
+                const { input } = firing.input as TwitchRewardTriggerInput;
+                void handleSubcommand(input);
+            }],
+        );
+        // Best-effort: create the reward on Twitch if it's missing. Logs but
+        // doesn't fail the toy if creation can't happen (e.g. token scope or
+        // non-affiliate channel).
+        void ensureRewardExists(rewardTitle, rewardCost);
+        console.log(`  AO3Tagger running — listening for redeems of "${rewardTitle}"`);
+    } else {
+        actionName = `ao3tagger-${triggerCommand}`;
+        action = new Action(
+            actionName,
+            [{
+                source: { platform: "twitch", kind: "chat" },
+                filters: [{ field: "message", op: "startsWithWord", value: triggerCommand }],
+            }],
+            [(firing) => {
+                const { message } = firing.input as TwitchChatTriggerInput;
+                const spaceIdx = message.indexOf(" ");
+                const subcommand = spaceIdx === -1 ? "" : message.slice(spaceIdx + 1);
+                void handleSubcommand(subcommand);
+            }],
+        );
+        console.log(`  AO3Tagger running — listening for "${triggerCommand}" in Twitch chat`);
+    }
     ctx.actionRegistry.register(action);
-
-    console.log(`  AO3Tagger running — listening for "${triggerCommand}" in Twitch chat`);
 
     return {
         stop: async () => {
@@ -146,6 +239,77 @@ export function startToy(ctx: AO3TaggerContext): ToyHandle {
             await unloadCurrentItem();
         },
     };
+}
+
+// --- Helix helper: ensure a custom reward exists ---
+
+interface HelixReward {
+    id: string;
+    title: string;
+    cost: number;
+}
+
+/**
+ * Look up the broadcaster's custom rewards via Helix. If a reward with the
+ * given title already exists, do nothing. Otherwise, create it.
+ *
+ * Best-effort: logs and returns if env vars are missing, the broadcaster
+ * isn't affiliate, or the access token lacks `channel:manage:redemptions`.
+ * The toy still works for redeems that the streamer creates manually with
+ * the right title.
+ */
+async function ensureRewardExists(title: string, cost: number): Promise<void> {
+    const clientId = process.env["TWITCH_CLIENT_ID"];
+    const accessToken = process.env["TWITCH_ACCESS_TOKEN"];
+    const broadcasterId = process.env["TWITCH_BROADCASTER_ID"];
+    if (!clientId || !accessToken || !broadcasterId) {
+        console.log("  AO3Tagger: Twitch env vars missing — skipping reward auto-create.");
+        return;
+    }
+    try {
+        const list = await fetch(
+            `https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=${broadcasterId}`,
+            {
+                headers: {
+                    "Client-Id": clientId,
+                    Authorization: `Bearer ${accessToken}`,
+                },
+            },
+        );
+        if (!list.ok) {
+            console.log(
+                `  AO3Tagger: could not list rewards (${list.status}). Create one named "${title}" manually.`,
+            );
+            return;
+        }
+        const json = (await list.json()) as { data: HelixReward[] };
+        if (json.data.some((r) => r.title === title)) {
+            return;
+        }
+        const create = await fetch(
+            `https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=${broadcasterId}`,
+            {
+                method: "POST",
+                headers: {
+                    "Client-Id": clientId,
+                    Authorization: `Bearer ${accessToken}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ title, cost, is_enabled: true }),
+            },
+        );
+        if (create.ok) {
+            console.log(`  AO3Tagger: created channel point reward "${title}" (${cost} points).`);
+        } else {
+            console.log(
+                `  AO3Tagger: failed to create reward "${title}" (${create.status}). Create it manually.`,
+            );
+        }
+    } catch (err) {
+        console.log(
+            `  AO3Tagger: reward setup error (${err instanceof Error ? err.message : err}). Create it manually.`,
+        );
+    }
 }
 
 // --- Rendering (SVG → sharp for crisp hinted text via Pango/FreeType) ---
